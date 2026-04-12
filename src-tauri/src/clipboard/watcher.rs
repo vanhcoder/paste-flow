@@ -23,10 +23,7 @@ impl ClipboardWatcher {
         thread::spawn(move || {
             let mut clipboard = match Clipboard::new() {
                 Ok(c) => c,
-                Err(e) => {
-                    eprintln!("Clipboard init failed: {}", e);
-                    return;
-                }
+                Err(_) => return,
             };
 
             let mut last_text = String::new();
@@ -44,7 +41,6 @@ impl ClipboardWatcher {
                         use crate::clipboard::queue::QueueMode;
                         if queue.get_mode() == QueueMode::Collecting {
                             let index = queue.add_item(current.clone());
-                            println!(">>> QUEUE ADDED [{}]: {}", index, current.chars().take(20).collect::<String>());
 
                             #[derive(serde::Serialize, Clone)]
                             struct QueueItemEvent {

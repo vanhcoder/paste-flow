@@ -13,6 +13,8 @@ pub use templates::*;
 use clipboard::watcher::ClipboardWatcher;
 use std::sync::Arc;
 use tauri::Manager;
+use system::hotkey::HotkeyMap;
+use std::collections::HashMap;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -23,26 +25,32 @@ pub fn run() {
             .with_handler(move |app_handle, shortcut, event| {
                 use tauri_plugin_global_shortcut::ShortcutState;
                 if event.state == ShortcutState::Pressed {
-                    let s = shortcut.to_string().to_lowercase().replace("control", "ctrl").replace("command", "cmd");
-                    println!(">>> NORMALIZED SHORTCUT: {}", s);
-                    
-                    if s.contains("shift") && (s.ends_with("+v") || s.ends_with("keyv")) {
-                        println!(">>> MATCHED: QUICK PASTE");
-                        if let Some(win) = app_handle.get_webview_window("quick-paste") {
-                            let is_visible = win.is_visible().unwrap_or(false);
-                            if is_visible { let _ = win.hide(); }
-                            else { let _ = win.show(); let _ = win.set_focus(); }
+                    let s = shortcut.to_string().to_lowercase()
+                        .replace("control", "ctrl")
+                        .replace("command", "cmd");
+
+                    // Look up action from dynamic HotkeyMap
+                    let action = system::hotkey::resolve_action(app_handle, &s);
+
+                    match action.as_deref() {
+                        Some("quick_paste") => {
+                            if let Some(win) = app_handle.get_webview_window("quick-paste") {
+                                let is_visible = win.is_visible().unwrap_or(false);
+                                if is_visible { let _ = win.hide(); }
+                                else { let _ = win.show(); let _ = win.set_focus(); }
+                            }
                         }
-                    } else if s.contains("shift") && (s.ends_with("+q") || s.ends_with("keyq")) {
-                         println!(">>> MATCHED: QUEUE TOGGLE");
-                         use crate::clipboard::queue_commands::toggle_queue_mode;
-                         let queue = app_handle.state::<Arc<clipboard::queue::PasteQueue>>();
-                         let _ = toggle_queue_mode(queue, app_handle.clone());
-                    } else if s.contains("shift") && (s.ends_with("+n") || s.ends_with("keyn")) {
-                         println!(">>> MATCHED: QUEUE NEXT");
-                         use crate::clipboard::queue_commands::queue_paste_next;
-                         let queue = app_handle.state::<Arc<clipboard::queue::PasteQueue>>();
-                         let _ = queue_paste_next(queue, app_handle.clone());
+                        Some("queue_toggle") => {
+                            use crate::clipboard::queue_commands::toggle_queue_mode;
+                            let queue = app_handle.state::<Arc<clipboard::queue::PasteQueue>>();
+                            let _ = toggle_queue_mode(queue, app_handle.clone());
+                        }
+                        Some("queue_next") => {
+                            use crate::clipboard::queue_commands::queue_paste_next;
+                            let queue = app_handle.state::<Arc<clipboard::queue::PasteQueue>>();
+                            let _ = queue_paste_next(queue, app_handle.clone());
+                        }
+                        _ => {}
                     }
                 }
             })
@@ -57,23 +65,19 @@ pub fn run() {
             let database = Arc::new(db::init_db(app.handle()));
             app.manage(database.clone());
 
+            // ── HotkeyMap state (must be managed before registering) ──
+            app.manage(HotkeyMap(Arc::new(std::sync::Mutex::new(HashMap::new()))));
+
             // ── Start Clipboard Watcher ──
             let watcher = ClipboardWatcher::new();
             let queue = Arc::new(clipboard::queue::PasteQueue::new());
-            
-            watcher.start(app.handle().clone(), database, queue.clone());
+
+            watcher.start(app.handle().clone(), database.clone(), queue.clone());
             app.manage(watcher);
             app.manage(queue);
 
-            // ── Register Global Hotkeys ──
-            use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut};
-            let v_key: Shortcut = "CmdOrCtrl+Shift+V".parse().unwrap();
-            let q_key: Shortcut = "CmdOrCtrl+Shift+Q".parse().unwrap();
-            let n_key: Shortcut = "CmdOrCtrl+Shift+N".parse().unwrap();
-            
-            let _ = app.global_shortcut().register(v_key);
-            let _ = app.global_shortcut().register(q_key);
-            let _ = app.global_shortcut().register(n_key);
+            // ── Register Global Hotkeys from DB settings ──
+            system::hotkey::register_hotkeys_from_settings(app.handle(), &database);
 
             // ── Init Tray ──
             let _ = system::tray::init_tray(app.handle());
@@ -106,20 +110,17 @@ pub fn run() {
                 use tauri::window::Color;
                 let _ = queue_win.set_background_color(Some(Color(0, 0, 0, 0)));
 
-                // Position at bottom-right corner of primary monitor
                 if let Ok(Some(monitor)) = queue_win.primary_monitor() {
                     let size = monitor.size();
                     let scale = monitor.scale_factor();
                     let screen_w = size.width as f64 / scale;
                     let screen_h = size.height as f64 / scale;
-                    // 100 = window size, 20 = margin right, 60 = margin bottom (taskbar)
                     let _ = queue_win.set_position(tauri::Position::Logical(
                         tauri::LogicalPosition::new(screen_w - 120.0, screen_h - 160.0),
                     ));
                 }
             }
 
-            println!("✅ PasteFlow started");
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -144,6 +145,8 @@ pub fn run() {
             templates::get_template,
             system::settings::get_setting,
             system::settings::set_setting,
+            system::hotkey::get_hotkeys,
+            system::hotkey::update_hotkey,
         ])
         .run(tauri::generate_context!())
         .expect("error while running PasteFlow");

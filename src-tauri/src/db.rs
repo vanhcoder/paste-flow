@@ -95,6 +95,8 @@ fn run_migrations(conn: &Connection) {
             ('max_history_items', '5000'),
             ('clipboard_poll_ms', '500'),
             ('hotkey_quick_paste', 'CmdOrCtrl+Shift+V'),
+            ('hotkey_queue_toggle', 'CmdOrCtrl+Shift+Q'),
+            ('hotkey_queue_next', 'CmdOrCtrl+Shift+N'),
             ('ai_provider', 'openai'),
             ('ai_api_key', ''),
             ('ai_model', 'gpt-4o-mini'),

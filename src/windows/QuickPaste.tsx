@@ -43,23 +43,19 @@ export default function QuickPaste() {
       const item = results[targetIdx];
       if (!item) return;
 
-      console.log(">>> ACTION:", item);
-
       if (item.result_type === "history") {
         const content = await api.getClipContent(item.id);
-        console.log(">>> CLIP CONTENT:", content?.substring(0, 50));
         await getCurrentWindow().hide();
         await api.pasteToActiveApp(content);
         reset();
       } else {
         const tpl = await api.getTemplate(item.id);
         if (tpl) {
-          console.log(">>> TEMPLATE CONTENT:", tpl.content.substring(0, 50));
           let vars: string[] = [];
           try {
             vars = typeof tpl.variables === "string" ? JSON.parse(tpl.variables) : tpl.variables;
-          } catch (e) {
-            console.error(">>> PARSE VARS ERROR:", e);
+          } catch {
+            // invalid variables JSON, treat as no variables
           }
 
           if (vars && vars.length > 0) {
@@ -72,7 +68,6 @@ export default function QuickPaste() {
         }
       }
     } catch (err: any) {
-      console.error(">>> HANDLE ACTION ERROR:", err);
       alert("ERROR: " + err.message);
     }
   };

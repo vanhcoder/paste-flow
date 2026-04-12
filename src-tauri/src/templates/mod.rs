@@ -99,13 +99,11 @@ pub fn create_template_group(
 
 #[tauri::command]
 pub fn list_templates(db: State<Arc<DbPool>>, payload: ListTemplatesPayload) -> Result<Vec<Template>, String> {
-    println!(">>> LIST_TEMPLATES: payload.gid={:?}", payload.group_id);
     let conn = db.0.lock().unwrap();
     let gid_val = payload.group_id.filter(|s| !s.is_empty() && s != "null" && s != "undefined");
 
     let templates = match gid_val {
         Some(ref gid) => {
-            println!("Filtering SQL by group_id: {}", gid);
             let mut stmt = conn.prepare("SELECT id, group_id, title, content, shortcut, tags, variables, use_count, created_at FROM templates WHERE group_id = ?1 ORDER BY created_at DESC")
                 .map_err(|e: rusqlite::Error| e.to_string())?;
             let items = stmt.query_map(params![gid], |row| map_template(row))
@@ -115,7 +113,6 @@ pub fn list_templates(db: State<Arc<DbPool>>, payload: ListTemplatesPayload) -> 
             items
         },
         None => {
-            println!("Listing ALL templates (no filter)");
             let mut stmt = conn.prepare("SELECT id, group_id, title, content, shortcut, tags, variables, use_count, created_at FROM templates ORDER BY created_at DESC")
                 .map_err(|e: rusqlite::Error| e.to_string())?;
             let items = stmt.query_map([], |row| map_template(row))
@@ -134,7 +131,6 @@ pub fn create_template(
     db: State<Arc<DbPool>>,
     payload: CreateTemplatePayload,
 ) -> Result<Template, String> {
-    println!(">>> CREATE_TEMPLATE: title={}, gid={:?}", payload.title, payload.group_id);
     let id = Uuid::new_v4().to_string();
     let gid = payload.group_id.filter(|s| !s.is_empty() && s != "null" && s != "undefined");
     
@@ -166,7 +162,6 @@ pub fn update_template(
     db: State<Arc<DbPool>>,
     payload: UpdateTemplatePayload,
 ) -> Result<(), String> {
-    println!(">>> UPDATE_TEMPLATE: id={}, new_gid={:?}", payload.id, payload.group_id);
     let conn = db.0.lock().unwrap();
     let gid = payload.group_id.filter(|s| !s.is_empty() && s != "null" && s != "undefined");
 
@@ -181,8 +176,6 @@ pub fn update_template(
     }
     
     let affected = conn.execute("UPDATE templates SET group_id = ?1 WHERE id = ?2", params![gid, payload.id]).map_err(|e| e.to_string())?;
-    println!("Update affected {} rows. Final GID: {:?}", affected, gid);
-    
     if affected == 0 {
         return Err(format!("No template found with ID: {}", payload.id));
     }

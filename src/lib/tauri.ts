@@ -125,6 +125,13 @@ export const api = {
   setSetting: (key: string, value: string) =>
     invoke<void>("set_setting", { key, value }),
 
+  // ── Hotkeys ──
+  getHotkeys: () =>
+    invoke<Record<string, string>>("get_hotkeys"),
+
+  updateHotkey: (settingKey: string, shortcut: string) =>
+    invoke<void>("update_hotkey", { settingKey, shortcut }),
+
   // ── Paste Queue ──
   toggleQueueMode: () =>
     invoke<QueueMode>("toggle_queue_mode"),

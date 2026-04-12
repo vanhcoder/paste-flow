@@ -21,7 +21,6 @@ pub fn paste_to_target(content: String, _target_hwnd: isize) -> Result<(), Strin
         thread::sleep(Duration::from_millis(50));
     }
 
-    println!(">>> QUEUE PASTE to target - content length: {}", content.len());
     simulate_paste_keystroke()?;
     Ok(())
 }
@@ -35,7 +34,6 @@ pub fn paste_to_active_app(content: String) -> Result<(), String> {
     // Wait for our window to hide and OS to return focus to previous app
     thread::sleep(Duration::from_millis(300));
 
-    println!(">>> SIMULATING PASTE (Native) - content length: {}", content.len());
     simulate_paste_keystroke()?;
     Ok(())
 }
@@ -80,9 +78,7 @@ fn simulate_paste_keystroke() -> Result<(), String> {
         let count = inputs.len() as u32;
         let sent = SendInput(count, inputs.as_mut_ptr(), size_of::<INPUT>() as i32);
         if sent != count {
-            println!(">>> SendInput failed: sent {} of {}", sent, count);
-        } else {
-            println!(">>> SendInput SUCCESS ({} keys)", count);
+            return Err(format!("SendInput failed: sent {} of {}", sent, count));
         }
     }
     Ok(())

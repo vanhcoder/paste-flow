@@ -23,8 +23,9 @@ export interface Template {
   title: string;
   content: string;
   shortcut: string | null;
-  variables: string; // JSON string
+  variables: string; // JSON string of VariableMeta[]
   use_count: number;
+  is_pinned: boolean;
   created_at: string;
 }
 
@@ -113,6 +114,18 @@ export const api = {
 
   deleteTemplate: (id: string) =>
     invoke<void>("delete_template", { id }),
+
+  pinTemplate: (id: string, pinned: boolean) =>
+    invoke<void>("pin_template", { id, pinned }),
+
+  incrementTemplateUseCount: (id: string) =>
+    invoke<void>("increment_template_use_count", { id }),
+
+  saveVariableValues: (templateId: string, values: { name: string; value: string }[]) =>
+    invoke<void>("save_variable_values", { payload: { template_id: templateId, values } }),
+
+  getRecentValues: (templateId: string, variableName: string) =>
+    invoke<string[]>("get_recent_values", { templateId, variableName }),
 
   // ── Search ──
   searchAll: (query: string, limit?: number) =>

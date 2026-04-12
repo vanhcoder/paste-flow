@@ -14,6 +14,7 @@ interface TemplateState {
   addTemplate: (title: string, content: string, group_id?: string | null) => Promise<void>;
   removeTemplate: (id: string) => Promise<void>;
   moveTemplate: (id: string, group_id: string | null) => Promise<void>;
+  pinTemplate: (id: string, pinned: boolean) => Promise<void>;
   setSelectedGroup: (groupId: string | null) => void;
 }
 
@@ -60,6 +61,11 @@ export const useTemplateStore = create<TemplateState>((set, get) => ({
 
   moveTemplate: async (id, group_id) => {
     await api.updateTemplate(id, undefined, undefined, group_id);
+    await get().loadTemplates(get().selectedGroupId || null);
+  },
+
+  pinTemplate: async (id, pinned) => {
+    await api.pinTemplate(id, pinned);
     await get().loadTemplates(get().selectedGroupId || null);
   },
 

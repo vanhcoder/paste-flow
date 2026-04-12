@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react";
 import { useTemplateStore } from "../../stores/templateStore";
-import { Plus, Hash, FolderPlus, Trash2, Move, ChevronRight, Folder, Edit3 } from "lucide-react";
+import { Plus, Hash, FolderPlus, Trash2, Move, ChevronRight, Folder, Edit3, Pin } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { api, Template } from "../../lib/tauri";
 import { VariableModal } from "./VariableModal";
+import { resolveBuiltins, parseVariableMeta, substituteVariables, hasBuiltinVariables } from "../../lib/variables";
 
 export function TemplateManager() {
-  const { groups, templates, loadGroups, setSelectedGroup, selectedGroupId, addTemplate, removeTemplate, addGroup, moveTemplate } = useTemplateStore();
+  const { groups, templates, loadGroups, setSelectedGroup, selectedGroupId, addTemplate, removeTemplate, addGroup, moveTemplate, pinTemplate } = useTemplateStore();
   const [isAdding, setIsAdding] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState<Template | null>(null);
   const [newTitle, setNewTitle] = useState("");
@@ -44,32 +45,35 @@ export function TemplateManager() {
     }
   };
 
-  const handleTemplateClick = (tpl: Template) => {
-    let vars: string[] = [];
-    try {
-      vars = typeof tpl.variables === "string" ? JSON.parse(tpl.variables) : tpl.variables;
-    } catch (e) {
-      console.error("Error parsing variables:", e);
-    }
-
-    if (vars && vars.length > 0) {
+  const handleTemplateClick = async (tpl: Template) => {
+    const vars = parseVariableMeta(tpl.variables);
+    if (vars.length > 0 || hasBuiltinVariables(tpl.content)) {
       setExpandingTemplate(tpl);
     } else {
-      api.pasteToActiveApp(tpl.content);
+      await api.pasteToActiveApp(tpl.content);
+      await api.incrementTemplateUseCount(tpl.id).catch(() => {});
     }
   };
 
-  const handleConfirmExpansion = (values: Record<string, string>) => {
+  const handleConfirmExpansion = async (values: Record<string, string>) => {
     if (!expandingTemplate) return;
-    let finalContent = expandingTemplate.content;
+    let content = expandingTemplate.content;
+    if (hasBuiltinVariables(content)) {
+      content = resolveBuiltins(content);
+    }
+    const meta = parseVariableMeta(expandingTemplate.variables);
+    const finalContent = substituteVariables(content, values, meta);
 
-    // Replace all {{var}} with values
-    Object.entries(values).forEach(([key, val]) => {
-      const regex = new RegExp(`\\{\\{${key}\\}\\}`, "g");
-      finalContent = finalContent.replace(regex, val || `{{${key}}}`);
-    });
+    await api.pasteToActiveApp(finalContent);
+    await api.incrementTemplateUseCount(expandingTemplate.id).catch(() => {});
 
-    api.pasteToActiveApp(finalContent);
+    const entries = Object.entries(values)
+      .filter(([, v]) => v)
+      .map(([name, value]) => ({ name, value }));
+    if (entries.length > 0) {
+      await api.saveVariableValues(expandingTemplate.id, entries).catch(() => {});
+    }
+
     setExpandingTemplate(null);
   };
 
@@ -199,15 +203,21 @@ export function TemplateManager() {
                       </div>
                       <p className="text-[13px] text-zinc-500 line-clamp-2 leading-relaxed font-medium mb-3">{tpl.content}</p>
 
-                      {JSON.parse(tpl.variables).length > 0 && (
-                        <div className="flex flex-wrap gap-1.5">
-                          {JSON.parse(tpl.variables).map((v: string) => (
-                            <span key={v} className="px-2 py-0.5 bg-blue-50/50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 rounded-md text-[10px] font-bold border border-blue-200/30 dark:border-blue-500/10">
-                              {v}
-                            </span>
-                          ))}
-                        </div>
-                      )}
+                      <div className="flex flex-wrap gap-1.5 items-center">
+                        {parseVariableMeta(tpl.variables).map((v) => (
+                          <span key={v.name} className="px-2 py-0.5 bg-blue-50/50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 rounded-md text-[10px] font-bold border border-blue-200/30 dark:border-blue-500/10">
+                            {v.name}{v.type !== "text" && `:${v.type}`}
+                          </span>
+                        ))}
+                        {tpl.use_count > 0 && (
+                          <span className="text-[10px] text-zinc-400 ml-1">
+                            Used {tpl.use_count}x
+                          </span>
+                        )}
+                        {tpl.is_pinned && (
+                          <Pin size={10} className="text-blue-500 ml-1" />
+                        )}
+                      </div>
                     </div>
 
                     <div className="flex flex-col items-end gap-2 shrink-0">
@@ -223,6 +233,13 @@ export function TemplateManager() {
                           className="p-2 hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-400 hover:text-blue-500 transition-colors rounded-lg"
                         >
                           <Edit3 size={14} />
+                        </button>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); pinTemplate(tpl.id, !tpl.is_pinned); }}
+                          className={`p-2 rounded-lg transition-colors ${tpl.is_pinned ? "text-blue-500 bg-blue-50 dark:bg-blue-900/30" : "text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800"}`}
+                          title={tpl.is_pinned ? "Unpin" : "Pin to Quick Paste"}
+                        >
+                          <Pin size={14} />
                         </button>
                         <button
                           onClick={(e) => { e.stopPropagation(); setShowMoveMenu(showMoveMenu === tpl.id ? null : tpl.id); }}

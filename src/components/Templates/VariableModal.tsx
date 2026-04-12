@@ -1,84 +1,182 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { X, Send, Keyboard } from "lucide-react";
+import { Template, api } from "../../lib/tauri";
+import { parseVariableMeta, VariableMeta } from "../../lib/variables";
 
-interface VariableModalProps {
-  template: {
-    title: string;
-    content: string;
-    variables: string;
-  };
+interface Props {
+  template: Template;
   onClose: () => void;
   onConfirm: (values: Record<string, string>) => void;
 }
 
-export function VariableModal({ template, onClose, onConfirm }: VariableModalProps) {
-  const variables: string[] = JSON.parse(template.variables);
+export function VariableModal({ template, onClose, onConfirm }: Props) {
+  const variables = parseVariableMeta(template.variables);
   const [values, setValues] = useState<Record<string, string>>({});
+  const [recentValues, setRecentValues] = useState<Record<string, string[]>>(
+    {},
+  );
 
   useEffect(() => {
-    // Initialize values
     const initial: Record<string, string> = {};
-    variables.forEach(v => initial[v] = "");
+    variables.forEach((v) => (initial[v.name] = ""));
     setValues(initial);
-  }, [template.variables]);
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    onConfirm(values);
+    variables.forEach((v) => {
+      api.getRecentValues(template.id, v.name).then((recent) => {
+        setRecentValues((prev) => ({ ...prev, [v.name]: recent }));
+      });
+    });
+  }, [template.id]);
+
+  const updateValue = (name: string, value: string) => {
+    setValues((prev) => ({ ...prev, [name]: value }));
   };
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="absolute inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
+    >
       <motion.div
-        initial={{ opacity: 0, scale: 0.95, y: 20 }}
-        animate={{ opacity: 1, scale: 1, y: 0 }}
-        exit={{ opacity: 0, scale: 0.95, y: 20 }}
-        className="w-full max-w-md bg-white dark:bg-zinc-900 rounded-3xl shadow-2xl border border-zinc-200 dark:border-zinc-800 overflow-hidden"
+        initial={{ scale: 0.95, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        exit={{ scale: 0.95, opacity: 0 }}
+        className="w-full max-w-md mx-4 bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-2xl overflow-hidden"
       >
-        <div className="px-6 py-5 border-b border-zinc-100 dark:border-zinc-800 flex items-center justify-between bg-zinc-50/50 dark:bg-zinc-800/20">
-          <div>
-            <h3 className="text-base font-bold text-zinc-900 dark:text-white flex items-center gap-2">
-              <Keyboard size={18} className="text-blue-500" /> Fill Variables
-            </h3>
-            <p className="text-[11px] text-zinc-400 font-medium">Template: {template.title}</p>
-          </div>
-          <button onClick={onClose} className="p-2 hover:bg-zinc-200 dark:hover:bg-zinc-800 rounded-full transition-colors">
-            <X size={18} className="text-zinc-400" />
-          </button>
+        <div className="px-5 py-4 border-b border-zinc-100 dark:border-zinc-800">
+          <p className="text-xs font-bold text-zinc-400 uppercase tracking-widest">
+            Fill Variables
+          </p>
+          <p className="text-sm font-semibold text-zinc-700 dark:text-zinc-200 mt-1">
+            {template.title}
+          </p>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+        <div className="px-5 py-4 space-y-4 max-h-[50vh] overflow-y-auto">
           {variables.map((v) => (
-            <div key={v} className="space-y-1.5 focus-within:translate-x-1 transition-transform">
-              <label className="text-[11px] font-bold text-zinc-400 uppercase tracking-widest pl-1">{v.replace(/_/g, " ")}</label>
-              <input
-                autoFocus={variables[0] === v}
-                placeholder={`Value for {{${v}}}...`}
-                className="w-full px-4 py-3 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700/50 rounded-xl text-[14px] outline-none focus:border-blue-500/50 focus:ring-4 focus:ring-blue-500/5 transition-all"
-                value={values[v] || ""}
-                onChange={(e) => setValues(prev => ({ ...prev, [v]: e.target.value }))}
-              />
-            </div>
+            <VariableField
+              key={v.name}
+              meta={v}
+              value={values[v.name] || ""}
+              recentValues={recentValues[v.name] || []}
+              onChange={(val) => updateValue(v.name, val)}
+            />
           ))}
+        </div>
 
-          <div className="flex gap-3 pt-4">
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex-1 px-4 py-3 text-[14px] font-bold text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-xl transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              className="flex-[2] px-4 py-3 bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 text-[14px] font-bold rounded-xl flex items-center justify-center gap-2 shadow-xl shadow-black/10 hover:scale-[1.02] active:scale-[0.98] transition-all"
-            >
-              Apply & Paste <Send size={14} />
-            </button>
-          </div>
-        </form>
+        <div className="px-5 py-3 border-t border-zinc-100 dark:border-zinc-800 flex justify-end gap-2">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 text-xs font-bold text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={() => onConfirm(values)}
+            className="px-5 py-2 text-xs font-bold bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors shadow-lg shadow-blue-500/20"
+          >
+            Continue
+          </button>
+        </div>
       </motion.div>
+    </motion.div>
+  );
+}
+
+function VariableField({
+  meta,
+  value,
+  recentValues,
+  onChange,
+}: {
+  meta: VariableMeta;
+  value: string;
+  recentValues: string[];
+  onChange: (val: string) => void;
+}) {
+  const label = meta.name.replace(/_/g, " ");
+  const inputCls =
+    "w-full px-3 py-2 text-sm bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all";
+
+  return (
+    <div>
+      <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1.5">
+        {label}
+        <span className="ml-1 text-zinc-400 normal-case font-normal tracking-normal">
+          ({meta.type})
+        </span>
+      </label>
+
+      {meta.type === "select" ? (
+        <select
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className={inputCls}
+        >
+          <option value="">Select...</option>
+          {(Array.isArray(meta.options) ? meta.options : []).map((opt) => (
+            <option key={String(opt)} value={String(opt)}>
+              {String(opt)}
+            </option>
+          ))}
+        </select>
+      ) : meta.type === "multiline" ? (
+        <textarea
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={`Enter ${label}...`}
+          rows={3}
+          className={inputCls + " resize-none"}
+        />
+      ) : meta.type === "date" ? (
+        <input
+          type="date"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className={inputCls}
+        />
+      ) : meta.type === "currency" ||
+        meta.type === "number" ||
+        meta.type === "percent" ? (
+        <input
+          type="number"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={
+            meta.type === "currency"
+              ? `Amount (${typeof meta.options === "string" ? meta.options : "USD"})`
+              : meta.type === "percent"
+                ? "e.g. 0.15 for 15%"
+                : "Enter number..."
+          }
+          step={meta.type === "percent" ? "0.01" : "1"}
+          className={inputCls}
+        />
+      ) : (
+        <input
+          type="text"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={`Enter ${label}...`}
+          className={inputCls}
+        />
+      )}
+
+      {recentValues.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 mt-2">
+          {recentValues.map((rv, i) => (
+            <button
+              key={i}
+              onClick={() => onChange(rv)}
+              className="px-2 py-0.5 text-[11px] font-medium bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 rounded-md hover:bg-blue-100 dark:hover:bg-blue-900/30 hover:text-blue-600 dark:hover:text-blue-400 border border-zinc-200 dark:border-zinc-700 transition-colors"
+            >
+              {rv}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

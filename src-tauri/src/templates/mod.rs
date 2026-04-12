@@ -1,3 +1,5 @@
+pub mod variables;
+
 use serde::{Deserialize, Serialize};
 use crate::db::DbPool;
 use uuid::Uuid;
@@ -24,6 +26,7 @@ pub struct Template {
     pub tags: String,
     pub variables: String,
     pub use_count: i32,
+    pub is_pinned: bool,
     pub created_at: String,
 }
 
@@ -104,7 +107,7 @@ pub fn list_templates(db: State<Arc<DbPool>>, payload: ListTemplatesPayload) -> 
 
     let templates = match gid_val {
         Some(ref gid) => {
-            let mut stmt = conn.prepare("SELECT id, group_id, title, content, shortcut, tags, variables, use_count, created_at FROM templates WHERE group_id = ?1 ORDER BY created_at DESC")
+            let mut stmt = conn.prepare("SELECT id, group_id, title, content, shortcut, tags, variables, use_count, is_pinned, created_at FROM templates WHERE group_id = ?1 ORDER BY created_at DESC")
                 .map_err(|e: rusqlite::Error| e.to_string())?;
             let items = stmt.query_map(params![gid], |row| map_template(row))
                 .map_err(|e: rusqlite::Error| e.to_string())?
@@ -113,7 +116,7 @@ pub fn list_templates(db: State<Arc<DbPool>>, payload: ListTemplatesPayload) -> 
             items
         },
         None => {
-            let mut stmt = conn.prepare("SELECT id, group_id, title, content, shortcut, tags, variables, use_count, created_at FROM templates ORDER BY created_at DESC")
+            let mut stmt = conn.prepare("SELECT id, group_id, title, content, shortcut, tags, variables, use_count, is_pinned, created_at FROM templates ORDER BY created_at DESC")
                 .map_err(|e: rusqlite::Error| e.to_string())?;
             let items = stmt.query_map([], |row| map_template(row))
                 .map_err(|e: rusqlite::Error| e.to_string())?
@@ -134,9 +137,8 @@ pub fn create_template(
     let id = Uuid::new_v4().to_string();
     let gid = payload.group_id.filter(|s| !s.is_empty() && s != "null" && s != "undefined");
     
-    let re = regex::Regex::new(r"\{\{([^}]+)\}\}").unwrap();
-    let vars: Vec<String> = re.captures_iter(&payload.content).map(|cap| cap[1].to_string()).collect();
-    let variables_json = serde_json::to_string(&vars).unwrap_or("[]".to_string());
+    let vars = variables::parse_variables(&payload.content);
+    let variables_json = variables::variables_to_json(&vars);
 
     let conn = db.0.lock().unwrap();
     conn.execute(
@@ -153,6 +155,7 @@ pub fn create_template(
         tags: "[]".to_string(),
         variables: variables_json,
         use_count: 0,
+        is_pinned: false,
         created_at: chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string(),
     })
 }
@@ -169,9 +172,8 @@ pub fn update_template(
         conn.execute("UPDATE templates SET title = ?1 WHERE id = ?2", params![t, payload.id]).map_err(|e| e.to_string())?;
     }
     if let Some(c) = payload.content {
-        let re = regex::Regex::new(r"\{\{([^}]+)\}\}").unwrap();
-        let vars: Vec<String> = re.captures_iter(&c).map(|cap| cap[1].to_string()).collect();
-        let variables_json = serde_json::to_string(&vars).unwrap_or("[]".to_string());
+        let vars = variables::parse_variables(&c);
+        let variables_json = variables::variables_to_json(&vars);
         conn.execute("UPDATE templates SET content = ?1, variables = ?2 WHERE id = ?3", params![c, variables_json, payload.id]).map_err(|e| e.to_string())?;
     }
     
@@ -195,7 +197,8 @@ fn map_template(row: &rusqlite::Row) -> rusqlite::Result<Template> {
         tags: row.get(5)?,
         variables: row.get(6)?,
         use_count: row.get(7)?,
-        created_at: row.get(8)?,
+        is_pinned: row.get::<_, i32>(8)? != 0,
+        created_at: row.get(9)?,
     })
 }
 
@@ -211,9 +214,109 @@ pub fn delete_template(db: State<Arc<DbPool>>, id: String) -> Result<(), String>
 pub fn get_template(db: State<Arc<DbPool>>, id: String) -> Result<Option<Template>, String> {
     let conn = db.0.lock().unwrap();
     let mut stmt = conn
-        .prepare("SELECT id, group_id, title, content, shortcut, tags, variables, use_count, created_at FROM templates WHERE id = ?1")
+        .prepare("SELECT id, group_id, title, content, shortcut, tags, variables, use_count, is_pinned, created_at FROM templates WHERE id = ?1")
         .map_err(|e| e.to_string())?;
 
     let tpl = stmt.query_row(params![id], |row| map_template(row)).ok();
     Ok(tpl)
+}
+
+// ══════════════════════════════════════════
+// Smart Templates V2 Commands
+// ══════════════════════════════════════════
+
+#[tauri::command]
+pub fn pin_template(db: State<Arc<DbPool>>, id: String, pinned: bool) -> Result<(), String> {
+    let conn = db.0.lock().unwrap();
+    conn.execute(
+        "UPDATE templates SET is_pinned = ?1 WHERE id = ?2",
+        params![pinned as i32, id],
+    ).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn increment_template_use_count(db: State<Arc<DbPool>>, id: String) -> Result<(), String> {
+    let conn = db.0.lock().unwrap();
+    conn.execute(
+        "UPDATE templates SET use_count = use_count + 1 WHERE id = ?1",
+        params![id],
+    ).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[derive(serde::Deserialize)]
+pub struct SaveVariableValuesPayload {
+    pub template_id: String,
+    pub values: Vec<VariableValueEntry>,
+}
+
+#[derive(serde::Deserialize)]
+pub struct VariableValueEntry {
+    pub name: String,
+    pub value: String,
+}
+
+#[tauri::command]
+pub fn save_variable_values(
+    db: State<Arc<DbPool>>,
+    payload: SaveVariableValuesPayload,
+) -> Result<(), String> {
+    let conn = db.0.lock().unwrap();
+    for v in &payload.values {
+        if v.value.is_empty() {
+            continue;
+        }
+        let existing: Option<i64> = conn.prepare(
+            "SELECT id FROM variable_history WHERE template_id = ?1 AND variable_name = ?2 AND value = ?3"
+        ).map_err(|e| e.to_string())?
+         .query_row(params![payload.template_id, v.name, v.value], |row| row.get(0))
+         .ok();
+
+        if let Some(row_id) = existing {
+            conn.execute(
+                "UPDATE variable_history SET used_at = datetime('now','localtime') WHERE id = ?1",
+                params![row_id],
+            ).map_err(|e| e.to_string())?;
+        } else {
+            conn.execute(
+                "INSERT INTO variable_history (template_id, variable_name, value) VALUES (?1, ?2, ?3)",
+                params![payload.template_id, v.name, v.value],
+            ).map_err(|e| e.to_string())?;
+        }
+
+        // Cleanup: keep only 10 most recent per variable per template
+        conn.execute(
+            "DELETE FROM variable_history WHERE id IN (
+                SELECT id FROM variable_history
+                WHERE template_id = ?1 AND variable_name = ?2
+                ORDER BY used_at DESC
+                LIMIT -1 OFFSET 10
+            )",
+            params![payload.template_id, v.name],
+        ).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn get_recent_values(
+    db: State<Arc<DbPool>>,
+    template_id: String,
+    variable_name: String,
+) -> Result<Vec<String>, String> {
+    let conn = db.0.lock().unwrap();
+    let mut stmt = conn.prepare(
+        "SELECT value FROM variable_history
+         WHERE template_id = ?1 AND variable_name = ?2
+         ORDER BY used_at DESC LIMIT 10"
+    ).map_err(|e| e.to_string())?;
+
+    let values = stmt.query_map(params![template_id, variable_name], |row| {
+        row.get::<_, String>(0)
+    }).map_err(|e| e.to_string())?
+      .filter_map(|r| r.ok())
+      .collect();
+
+    Ok(values)
 }

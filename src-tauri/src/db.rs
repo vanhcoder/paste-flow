@@ -104,4 +104,52 @@ fn run_migrations(conn: &Connection) {
     ",
     )
     .expect("Failed to run migrations");
+
+    // ── Smart Templates V2 migrations ──
+    let _ = conn.execute_batch("
+        ALTER TABLE templates ADD COLUMN is_pinned INTEGER DEFAULT 0;
+    ");
+
+    conn.execute_batch("
+        CREATE TABLE IF NOT EXISTS variable_history (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            template_id   TEXT NOT NULL,
+            variable_name TEXT NOT NULL,
+            value         TEXT NOT NULL,
+            used_at       TEXT DEFAULT (datetime('now','localtime'))
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_var_history_lookup
+            ON variable_history(template_id, variable_name, used_at DESC);
+    ").expect("Failed to create variable_history table");
+
+    migrate_variable_format(conn);
+}
+
+/// Migrate old variable format (["name"]) to new format ([{"name":"name","type":"text"}])
+fn migrate_variable_format(conn: &Connection) {
+    let mut stmt = conn.prepare(
+        "SELECT id, variables FROM templates WHERE variables IS NOT NULL AND variables != '[]'"
+    ).unwrap();
+
+    let rows: Vec<(String, String)> = stmt.query_map([], |row| {
+        Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+    }).unwrap().filter_map(|r| r.ok()).collect();
+
+    for (id, vars_json) in rows {
+        if vars_json.contains("\"name\"") {
+            continue;
+        }
+        if let Ok(old_vars) = serde_json::from_str::<Vec<String>>(&vars_json) {
+            let new_vars: Vec<serde_json::Value> = old_vars.into_iter().map(|name| {
+                serde_json::json!({"name": name, "type": "text"})
+            }).collect();
+            if let Ok(new_json) = serde_json::to_string(&new_vars) {
+                let _ = conn.execute(
+                    "UPDATE templates SET variables = ?1 WHERE id = ?2",
+                    rusqlite::params![new_json, id],
+                );
+            }
+        }
+    }
 }

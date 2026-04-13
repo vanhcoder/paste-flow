@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { Monitor, Keyboard, Terminal, Sparkles, CheckCircle2, RotateCcw } from "lucide-react";
+import { Monitor, Keyboard, Terminal, Sparkles, CheckCircle2, RotateCcw, ShieldCheck, HardDrive, Wifi, WifiOff, Lock, Database, Zap, ChevronDown, ChevronUp } from "lucide-react";
 import { enable, disable, isEnabled } from "@tauri-apps/plugin-autostart";
 import { api } from "../../lib/tauri";
 
@@ -271,7 +271,141 @@ export function GeneralSettings() {
             <Sparkles size={120} className="absolute -right-4 -bottom-4 text-white/10 rotate-12 group-hover:scale-110 transition-transform duration-700" />
           </div>
         </section>
+
+        {/* Section: Privacy & Data */}
+        <PrivacySection />
       </div>
     </div>
+  );
+}
+
+// ── Privacy & Data Section ────────────────────────────────────────────────────
+
+const DATA_ITEMS = [
+  {
+    icon: <Database size={15} />,
+    label: "Clipboard History",
+    detail: "Stored locally on your device only. Never uploaded anywhere.",
+    local: true,
+  },
+  {
+    icon: <Zap size={15} />,
+    label: "Smart Templates",
+    detail: "All templates and variable history saved to local SQLite database.",
+    local: true,
+  },
+  {
+    icon: <Lock size={15} />,
+    label: "Hotkey Settings",
+    detail: "Saved locally in the app's configuration database.",
+    local: true,
+  },
+  {
+    icon: <Sparkles size={15} />,
+    label: "AI Reformat (coming soon)",
+    detail: "When enabled, selected text is sent to Anthropic/OpenAI API for processing. PasteFlow does not store or log this data. Subject to the API provider's privacy policy.",
+    local: false,
+  },
+];
+
+function PrivacySection() {
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <section className="space-y-4">
+      <div className="flex items-center gap-2 mb-2 pb-2 border-b border-zinc-100 dark:border-zinc-800">
+        <ShieldCheck size={16} className="text-zinc-400" />
+        <h3 className="text-[11px] font-bold text-zinc-400 uppercase tracking-widest">Privacy & Data</h3>
+      </div>
+
+      {/* Trust banner */}
+      <div className="flex items-center gap-4 p-4 bg-emerald-50 dark:bg-emerald-900/15 border border-emerald-200/60 dark:border-emerald-700/30 rounded-2xl">
+        <div className="w-10 h-10 rounded-xl bg-emerald-500/10 dark:bg-emerald-500/20 flex items-center justify-center shrink-0">
+          <HardDrive size={20} className="text-emerald-600 dark:text-emerald-400" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-bold text-emerald-800 dark:text-emerald-300">100% Local — Your data never leaves your device</p>
+          <p className="text-xs text-emerald-700/70 dark:text-emerald-400/70 mt-0.5">
+            No account required. No analytics. No telemetry. No cloud sync.
+          </p>
+        </div>
+        <WifiOff size={18} className="shrink-0 text-emerald-500/60" />
+      </div>
+
+      {/* Guarantees row */}
+      <div className="grid grid-cols-3 gap-2">
+        {[
+          { label: "No analytics", icon: <WifiOff size={13} /> },
+          { label: "No account", icon: <Lock size={13} /> },
+          { label: "No cloud sync", icon: <Wifi size={13} className="line-through opacity-50" /> },
+        ].map(item => (
+          <div
+            key={item.label}
+            className="flex flex-col items-center gap-1.5 p-3 bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200/50 dark:border-zinc-700/40 rounded-xl"
+          >
+            <span className="text-zinc-400">{item.icon}</span>
+            <span className="text-[10px] font-bold text-zinc-500 dark:text-zinc-400 text-center leading-tight">{item.label}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* Data breakdown — collapsible */}
+      <div className="border border-zinc-200/60 dark:border-zinc-700/40 rounded-2xl overflow-hidden">
+        <button
+          onClick={() => setExpanded(p => !p)}
+          className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-zinc-50 dark:hover:bg-zinc-800/30 transition-colors"
+        >
+          <span className="text-[12px] font-bold text-zinc-600 dark:text-zinc-400">What data is stored & where</span>
+          {expanded
+            ? <ChevronUp size={14} className="text-zinc-400" />
+            : <ChevronDown size={14} className="text-zinc-400" />
+          }
+        </button>
+
+        {expanded && (
+          <div className="border-t border-zinc-200/60 dark:border-zinc-700/40 divide-y divide-zinc-100 dark:divide-zinc-800">
+            {DATA_ITEMS.map(item => (
+              <div key={item.label} className="flex items-start gap-3 px-4 py-3">
+                <div className={`mt-0.5 shrink-0 ${item.local ? "text-emerald-500" : "text-amber-500"}`}>
+                  {item.icon}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-0.5">
+                    <span className="text-[12px] font-bold text-zinc-700 dark:text-zinc-300">{item.label}</span>
+                    <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${
+                      item.local
+                        ? "bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 border border-emerald-200/50 dark:border-emerald-700/30"
+                        : "bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 border border-amber-200/50 dark:border-amber-700/30"
+                    }`}>
+                      {item.local ? "Local only" : "External API"}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-zinc-500 dark:text-zinc-500 leading-relaxed">{item.detail}</p>
+                </div>
+              </div>
+            ))}
+
+            {/* Storage path */}
+            <div className="px-4 py-3 bg-zinc-50/50 dark:bg-zinc-800/20">
+              <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-1">Data Location</p>
+              <p className="text-[11px] font-mono text-zinc-500 dark:text-zinc-500">
+                Windows: <span className="text-zinc-700 dark:text-zinc-400">%APPDATA%\paste-flow\paste-flow.db</span>
+              </p>
+              <p className="text-[11px] font-mono text-zinc-500 dark:text-zinc-500 mt-0.5">
+                macOS: <span className="text-zinc-700 dark:text-zinc-400">~/Library/Application Support/paste-flow/</span>
+              </p>
+              <p className="text-[11px] font-mono text-zinc-500 dark:text-zinc-500 mt-0.5">
+                Linux: <span className="text-zinc-700 dark:text-zinc-400">~/.local/share/paste-flow/</span>
+              </p>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <p className="text-[11px] text-zinc-400 px-1 leading-relaxed">
+        PasteFlow is a local-first app. Deleting the app removes all data permanently.
+        No account exists to deactivate.
+      </p>
+    </section>
   );
 }

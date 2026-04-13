@@ -1,6 +1,5 @@
 import { create } from "zustand";
-import { api, QueueStatus, QueueMode } from "../lib/tauri";
-import { listen } from "@tauri-apps/api/event";
+import { api, QueueStatus } from "../lib/tauri";
 
 interface QueueState {
   status: QueueStatus;

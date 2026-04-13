@@ -4,6 +4,7 @@ mod templates;
 mod ai;
 mod search;
 mod system;
+mod platform; // OS abstraction: focus management, paste simulation
 
 pub use clipboard::*;
 pub use db::*;
@@ -107,13 +108,29 @@ pub fn run() {
 
             // ── Queue Indicator: transparent bg + bottom-right position ──
             if let Some(queue_win) = app.get_webview_window("queue-indicator") {
-                use tauri::window::Color;
-                let _ = queue_win.set_background_color(Some(Color(0, 0, 0, 0)));
+                // Windows: WebView2 needs an explicit RGBA(0,0,0,0) call to be
+                //          fully transparent. This is repeated in update_window_visibility
+                //          because WebView2 can reset it after hide/show cycles.
+                //
+                // TODO(macOS): No call needed here. Set `"transparent": true` in
+                //              tauri.conf.json for this window. For vibrancy (frosted
+                //              glass), add NSVisualEffectView via webview().with_webview().
+                //
+                // TODO(Linux): Set `"transparent": true` in tauri.conf.json.
+                //              Transparency requires a compositor (e.g. picom on X11).
+                //              On Wayland, the compositor handles it automatically.
+                #[cfg(target_os = "windows")]
+                {
+                    use tauri::window::Color;
+                    let _ = queue_win.set_background_color(Some(Color(0, 0, 0, 0)));
+                }
 
+                // Position bottom-right of primary monitor.
+                // `primary_monitor()` is cross-platform in Tauri — no changes needed.
                 if let Ok(Some(monitor)) = queue_win.primary_monitor() {
-                    let size = monitor.size();
+                    let size  = monitor.size();
                     let scale = monitor.scale_factor();
-                    let screen_w = size.width as f64 / scale;
+                    let screen_w = size.width  as f64 / scale;
                     let screen_h = size.height as f64 / scale;
                     let _ = queue_win.set_position(tauri::Position::Logical(
                         tauri::LogicalPosition::new(screen_w - 120.0, screen_h - 160.0),

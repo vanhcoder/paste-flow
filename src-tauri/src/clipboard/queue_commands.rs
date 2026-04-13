@@ -1,6 +1,7 @@
 use tauri::{AppHandle, Emitter, State, Manager};
 use super::queue::{PasteQueue, QueueMode, QueueItem};
 use std::sync::Arc;
+use crate::platform;
 
 #[derive(serde::Serialize, Clone)]
 pub struct QueueStatus {
@@ -18,24 +19,43 @@ pub struct QueueProgress {
     pub total: usize,
 }
 
+// ── Window visibility ─────────────────────────────────────────────────────────
+
 pub fn update_window_visibility(app: &AppHandle, mode: &QueueMode) {
     if let Some(win) = app.get_webview_window("queue-indicator") {
         match mode {
-            QueueMode::Off => { let _ = win.hide(); }
+            QueueMode::Off => {
+                let _ = win.hide();
+            }
             _ => {
-                use tauri::window::Color;
-                let _ = win.set_background_color(Some(Color(0, 0, 0, 0)));
+                // Ensure transparent background each time the window is shown.
+                // On Windows, WebView2 can reset the background color after hide/show.
+                //
+                // TODO(macOS): Transparency is controlled by `"transparent": true`
+                //   in tauri.conf.json. No extra call needed here, but if you add
+                //   NSVisualEffectView for vibrancy, re-apply it here too.
+                //
+                // TODO(Linux): Same as macOS — Tauri handles it via GTK transparency.
+                //   If using custom compositor hints (e.g. _NET_WM_WINDOW_TYPE), re-apply here.
+                #[cfg(target_os = "windows")]
+                {
+                    use tauri::window::Color;
+                    let _ = win.set_background_color(Some(Color(0, 0, 0, 0)));
+                }
+
                 let _ = win.show();
-                // NEVER set_focus() here — indicator must not steal focus from target app
+                // NEVER call set_focus() here — the indicator must not steal focus
+                // from the target app that is about to receive our paste keystroke.
             }
         }
     }
 }
 
-pub fn get_queue_status_raw(queue: &Arc<PasteQueue>) -> QueueStatus {
-    let all_items = queue.peek_all();
-    let next_preview = all_items.first().map(|i| i.preview.clone());
+// ── Status helpers ────────────────────────────────────────────────────────────
 
+pub fn get_queue_status_raw(queue: &Arc<PasteQueue>) -> QueueStatus {
+    let all_items    = queue.peek_all();
+    let next_preview = all_items.first().map(|i| i.preview.clone());
     QueueStatus {
         mode: queue.get_mode(),
         total: queue.total(),
@@ -45,14 +65,14 @@ pub fn get_queue_status_raw(queue: &Arc<PasteQueue>) -> QueueStatus {
     }
 }
 
+// ── Tauri commands ────────────────────────────────────────────────────────────
+
 #[tauri::command]
 pub fn toggle_queue_mode(
     queue: State<'_, Arc<PasteQueue>>,
     app: AppHandle,
 ) -> Result<QueueMode, String> {
-    let current = queue.get_mode();
-
-    let new_mode = match current {
+    let new_mode = match queue.get_mode() {
         QueueMode::Off => {
             queue.start_collecting();
             QueueMode::Collecting
@@ -63,15 +83,13 @@ pub fn toggle_queue_mode(
                 QueueMode::Off
             } else {
                 queue.finish_collecting();
-
-                // Nạp sẵn đạn
+                // Pre-load the first item into the clipboard so the first
+                // queue_paste_next call is instant.
                 if let Some(first) = queue.items.lock().unwrap().front() {
-                    use arboard::Clipboard;
-                    if let Ok(mut clipboard) = Clipboard::new() {
-                        let _ = clipboard.set_text(&first.content);
+                    if let Ok(mut cb) = arboard::Clipboard::new() {
+                        let _ = cb.set_text(&first.content);
                     }
                 }
-
                 QueueMode::Pasting
             }
         }
@@ -98,32 +116,30 @@ pub fn queue_paste_next(
     queue: State<'_, Arc<PasteQueue>>,
     app: AppHandle,
 ) -> Result<Option<QueueItem>, String> {
-    // Save foreground window BEFORE any focus changes (cast to isize for Send)
-    #[cfg(target_os = "windows")]
-    let target_hwnd = unsafe {
-        windows_sys::Win32::UI::WindowsAndMessaging::GetForegroundWindow() as isize
-    };
-    #[cfg(not(target_os = "windows"))]
-    let target_hwnd = 0isize;
+    // Capture the focused window NOW — before any of our code touches focus.
+    //
+    // On Windows this is a real HWND.
+    // On macOS / Linux this currently returns NULL_WINDOW (stubs — see platform module).
+    let target_window: platform::WindowHandle = platform::get_active_window();
 
     let item = queue.pop_next();
 
     if let Some(ref i) = item {
         let _ = app.emit("queue-progress", QueueProgress {
             pasted_index: i.index,
-            remaining: queue.remaining(),
-            total: queue.total(),
+            remaining:    queue.remaining(),
+            total:        queue.total(),
         });
 
-        // Update UI first (show/hide indicator), then paste in background
+        // Update indicator UI first, then paste in a background thread so the
+        // Tauri command returns immediately (paste has a 150 ms sleep internally).
         let mode = queue.get_mode();
         update_window_visibility(&app, &mode);
         let _ = app.emit("queue-status-changed", get_queue_status_raw(&queue));
 
-        // Paste in background thread — clipboard write happens HERE only (no double-write)
-        let content_clone = i.content.clone();
+        let content = i.content.clone();
         std::thread::spawn(move || {
-            let _ = crate::clipboard::paste::paste_to_target(content_clone, target_hwnd);
+            let _ = crate::clipboard::paste::paste_to_target(content, target_window);
         });
     }
 
@@ -136,7 +152,6 @@ pub fn skip_queue_item(
     app: AppHandle,
 ) -> Result<(), String> {
     let _ = queue.pop_next();
-
     let mode = queue.get_mode();
     update_window_visibility(&app, &mode);
     let _ = app.emit("queue-status-changed", get_queue_status_raw(&queue));

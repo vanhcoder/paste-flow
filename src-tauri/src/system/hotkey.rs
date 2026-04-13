@@ -43,9 +43,10 @@ pub fn register_hotkeys_from_settings(app: &AppHandle, db: &DbPool) {
                 continue;
             }
             if let Ok(shortcut) = shortcut_str.parse::<Shortcut>() {
+                // Get canonical string BEFORE register — same format the handler receives
+                let canonical = shortcut.to_string();
                 if gs.register(shortcut).is_ok() {
-                    // Normalize for matching: lowercase, control→ctrl, command→cmd
-                    let normalized = shortcut_str.to_lowercase()
+                    let normalized = canonical.to_lowercase()
                         .replace("control", "ctrl")
                         .replace("command", "cmd");
                     map.insert(normalized, action.to_string());

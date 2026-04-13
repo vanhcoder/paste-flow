@@ -1,11 +1,11 @@
 pub mod variables;
 
-use serde::{Deserialize, Serialize};
 use crate::db::DbPool;
-use uuid::Uuid;
-use tauri::State;
-use std::sync::Arc;
 use rusqlite::params;
+use serde::{Deserialize, Serialize};
+use std::sync::Arc;
+use tauri::State;
+use uuid::Uuid;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct TemplateGroup {
@@ -54,7 +54,9 @@ pub struct UpdateTemplatePayload {
 pub fn list_template_groups(db: State<Arc<DbPool>>) -> Result<Vec<TemplateGroup>, String> {
     let conn = db.0.lock().unwrap();
     let mut stmt = conn
-        .prepare("SELECT id, name, icon, color, sort_order FROM template_groups ORDER BY sort_order ASC")
+        .prepare(
+            "SELECT id, name, icon, color, sort_order FROM template_groups ORDER BY sort_order ASC",
+        )
         .map_err(|e: rusqlite::Error| e.to_string())?;
 
     let groups = stmt
@@ -84,12 +86,13 @@ pub fn create_template_group(
     let id = Uuid::new_v4().to_string();
     let icon_str = icon.unwrap_or_else(|| "📁".to_string());
     let color_str = color.unwrap_or_else(|| "#3B82F6".to_string());
-    
+
     let conn = db.0.lock().unwrap();
     conn.execute(
         "INSERT INTO template_groups (id, name, icon, color) VALUES (?1, ?2, ?3, ?4)",
         params![id, name, icon_str, color_str],
-    ).map_err(|e| e.to_string())?;
+    )
+    .map_err(|e| e.to_string())?;
 
     Ok(TemplateGroup {
         id,
@@ -101,24 +104,31 @@ pub fn create_template_group(
 }
 
 #[tauri::command]
-pub fn list_templates(db: State<Arc<DbPool>>, payload: ListTemplatesPayload) -> Result<Vec<Template>, String> {
+pub fn list_templates(
+    db: State<Arc<DbPool>>,
+    payload: ListTemplatesPayload,
+) -> Result<Vec<Template>, String> {
     let conn = db.0.lock().unwrap();
-    let gid_val = payload.group_id.filter(|s| !s.is_empty() && s != "null" && s != "undefined");
+    let gid_val = payload
+        .group_id
+        .filter(|s| !s.is_empty() && s != "null" && s != "undefined");
 
     let templates = match gid_val {
         Some(ref gid) => {
             let mut stmt = conn.prepare("SELECT id, group_id, title, content, shortcut, tags, variables, use_count, is_pinned, created_at FROM templates WHERE group_id = ?1 ORDER BY created_at DESC")
                 .map_err(|e: rusqlite::Error| e.to_string())?;
-            let items = stmt.query_map(params![gid], |row| map_template(row))
+            let items = stmt
+                .query_map(params![gid], |row| map_template(row))
                 .map_err(|e: rusqlite::Error| e.to_string())?
                 .collect::<Result<Vec<_>, rusqlite::Error>>()
                 .map_err(|e: rusqlite::Error| e.to_string())?;
             items
-        },
+        }
         None => {
             let mut stmt = conn.prepare("SELECT id, group_id, title, content, shortcut, tags, variables, use_count, is_pinned, created_at FROM templates ORDER BY created_at DESC")
                 .map_err(|e: rusqlite::Error| e.to_string())?;
-            let items = stmt.query_map([], |row| map_template(row))
+            let items = stmt
+                .query_map([], |row| map_template(row))
                 .map_err(|e: rusqlite::Error| e.to_string())?
                 .collect::<Result<Vec<_>, rusqlite::Error>>()
                 .map_err(|e: rusqlite::Error| e.to_string())?;
@@ -135,8 +145,10 @@ pub fn create_template(
     payload: CreateTemplatePayload,
 ) -> Result<Template, String> {
     let id = Uuid::new_v4().to_string();
-    let gid = payload.group_id.filter(|s| !s.is_empty() && s != "null" && s != "undefined");
-    
+    let gid = payload
+        .group_id
+        .filter(|s| !s.is_empty() && s != "null" && s != "undefined");
+
     let vars = variables::parse_variables(&payload.content);
     let variables_json = variables::variables_to_json(&vars);
 
@@ -166,23 +178,42 @@ pub fn update_template(
     payload: UpdateTemplatePayload,
 ) -> Result<(), String> {
     let conn = db.0.lock().unwrap();
-    let gid = payload.group_id.filter(|s| !s.is_empty() && s != "null" && s != "undefined");
+    let gid = payload
+        .group_id
+        .filter(|s| !s.is_empty() && s != "null" && s != "undefined");
 
     if let Some(t) = payload.title {
-        conn.execute("UPDATE templates SET title = ?1 WHERE id = ?2", params![t, payload.id]).map_err(|e| e.to_string())?;
+        conn.execute(
+            "UPDATE templates SET title = ?1 WHERE id = ?2",
+            params![t, payload.id],
+        )
+        .map_err(|e| e.to_string())?;
     }
     if let Some(c) = payload.content {
         let vars = variables::parse_variables(&c);
         let variables_json = variables::variables_to_json(&vars);
-        conn.execute("UPDATE templates SET content = ?1, variables = ?2 WHERE id = ?3", params![c, variables_json, payload.id]).map_err(|e| e.to_string())?;
+        conn.execute(
+            "UPDATE templates SET content = ?1, variables = ?2 WHERE id = ?3",
+            params![c, variables_json, payload.id],
+        )
+        .map_err(|e| e.to_string())?;
     }
-    
-    let affected = conn.execute("UPDATE templates SET group_id = ?1 WHERE id = ?2", params![gid, payload.id]).map_err(|e| e.to_string())?;
+
+    let affected = conn
+        .execute(
+            "UPDATE templates SET group_id = ?1 WHERE id = ?2",
+            params![gid, payload.id],
+        )
+        .map_err(|e| e.to_string())?;
     if affected == 0 {
         return Err(format!("No template found with ID: {}", payload.id));
     }
 
-    conn.execute("UPDATE templates SET updated_at = datetime('now','localtime') WHERE id = ?1", params![payload.id]).map_err(|e| e.to_string())?;
+    conn.execute(
+        "UPDATE templates SET updated_at = datetime('now','localtime') WHERE id = ?1",
+        params![payload.id],
+    )
+    .map_err(|e| e.to_string())?;
 
     Ok(())
 }
@@ -231,7 +262,8 @@ pub fn pin_template(db: State<Arc<DbPool>>, id: String, pinned: bool) -> Result<
     conn.execute(
         "UPDATE templates SET is_pinned = ?1 WHERE id = ?2",
         params![pinned as i32, id],
-    ).map_err(|e| e.to_string())?;
+    )
+    .map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -241,7 +273,8 @@ pub fn increment_template_use_count(db: State<Arc<DbPool>>, id: String) -> Resul
     conn.execute(
         "UPDATE templates SET use_count = use_count + 1 WHERE id = ?1",
         params![id],
-    ).map_err(|e| e.to_string())?;
+    )
+    .map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -277,7 +310,8 @@ pub fn save_variable_values(
             conn.execute(
                 "UPDATE variable_history SET used_at = datetime('now','localtime') WHERE id = ?1",
                 params![row_id],
-            ).map_err(|e| e.to_string())?;
+            )
+            .map_err(|e| e.to_string())?;
         } else {
             conn.execute(
                 "INSERT INTO variable_history (template_id, variable_name, value) VALUES (?1, ?2, ?3)",
@@ -294,7 +328,8 @@ pub fn save_variable_values(
                 LIMIT -1 OFFSET 10
             )",
             params![payload.template_id, v.name],
-        ).map_err(|e| e.to_string())?;
+        )
+        .map_err(|e| e.to_string())?;
     }
     Ok(())
 }
@@ -306,17 +341,21 @@ pub fn get_recent_values(
     variable_name: String,
 ) -> Result<Vec<String>, String> {
     let conn = db.0.lock().unwrap();
-    let mut stmt = conn.prepare(
-        "SELECT value FROM variable_history
+    let mut stmt = conn
+        .prepare(
+            "SELECT value FROM variable_history
          WHERE template_id = ?1 AND variable_name = ?2
-         ORDER BY used_at DESC LIMIT 10"
-    ).map_err(|e| e.to_string())?;
+         ORDER BY used_at DESC LIMIT 10",
+        )
+        .map_err(|e| e.to_string())?;
 
-    let values = stmt.query_map(params![template_id, variable_name], |row| {
-        row.get::<_, String>(0)
-    }).map_err(|e| e.to_string())?
-      .filter_map(|r| r.ok())
-      .collect();
+    let values = stmt
+        .query_map(params![template_id, variable_name], |row| {
+            row.get::<_, String>(0)
+        })
+        .map_err(|e| e.to_string())?
+        .filter_map(|r| r.ok())
+        .collect();
 
     Ok(values)
 }

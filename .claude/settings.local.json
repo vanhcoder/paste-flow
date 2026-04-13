@@ -4,7 +4,10 @@
       "mcp__claude_ai_Context7__resolve-library-id",
       "Bash(npx tailwindcss:*)",
       "Bash(cargo check:*)",
-      "Bash(npm run:*)"
+      "Bash(npm run:*)",
+      "Bash(find src:*)",
+      "Bash(cargo build:*)",
+      "Bash(npx tsc:*)"
     ]
   }
 }

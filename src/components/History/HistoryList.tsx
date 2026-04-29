@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { useClipboardStore } from "../../stores/clipboardStore";
-import { Pin, Trash2, Clock, AppWindow, Search, FilterX } from "lucide-react";
+import { Pin, Trash2, Clock, AppWindow, Search, FilterX, Zap } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { TransformPopover } from "../UI/TransformPopover";
 
 export function HistoryList() {
   const { items, loading, load, pin, remove, clearAll, pasteItem, startListening } =
@@ -9,6 +10,7 @@ export function HistoryList() {
   const [searchQuery, setSearchQuery] = useState("");
   const [activeFilter, setActiveFilter] = useState<"all" | "pinned">("all");
   const [confirmingPurge, setConfirmingPurge] = useState(false);
+  const [transformState, setTransformState] = useState<{ text: string; anchor: HTMLElement } | null>(null);
 
   useEffect(() => {
     load();
@@ -146,6 +148,17 @@ export function HistoryList() {
 
                   <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity self-start mt-1">
                     <button
+                      title="Quick Transform"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        const text = item.content_text || item.content_preview || "";
+                        setTransformState({ text, anchor: e.currentTarget });
+                      }}
+                      className="p-1.5 rounded-md hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-400 hover:text-blue-500"
+                    >
+                      <Zap size={14} />
+                    </button>
+                    <button
                       onClick={(e) => { e.stopPropagation(); pin(item.id, !item.is_pinned); }}
                       className={`p-1.5 rounded-md hover:bg-zinc-200 dark:hover:bg-zinc-700 ${item.is_pinned ? "text-blue-500" : "text-zinc-400"}`}
                     >
@@ -164,6 +177,14 @@ export function HistoryList() {
           )}
         </AnimatePresence>
       </div>
+
+      {transformState && (
+        <TransformPopover
+          text={transformState.text}
+          anchor={transformState.anchor}
+          onClose={() => setTransformState(null)}
+        />
+      )}
     </div>
   );
 }

@@ -6,6 +6,7 @@ import {
 } from "lucide-react";
 import { api, type AiSkill, type ReformatRecord } from "../../lib/tauri";
 import { toast } from "../../stores/toastStore";
+import { TransformPopover } from "../UI/TransformPopover";
 
 // ── Built-in style definitions ────────────────────────────────────────────────
 
@@ -45,14 +46,19 @@ export function AIReformat() {
   const [history, setHistory]           = useState<ReformatRecord[]>([]);
   const [showHistory, setShowHistory]   = useState(false);
 
+  // Transform popover
+  const [transformAnchor, setTransformAnchor] = useState<HTMLElement | null>(null);
+
   useEffect(() => {
     Promise.all([
-      api.getSetting("ai_api_key"),
       api.getSetting("ai_provider"),
       api.getSetting("ai_model"),
       api.listAiSkills(),
       api.getReformatHistory(10),
-    ]).then(([key, prov, mod, sk, hist]) => {
+    ]).then(async ([prov, mod, sk, hist]) => {
+      const resolvedProvider = prov || "openai";
+      const keySettingName = resolvedProvider === "anthropic" ? "ai_api_key_anthropic" : "ai_api_key_openai";
+      const key = await api.getSetting(keySettingName);
       setHasKey(!!key?.trim());
       if (prov) setProvider(prov);
       if (mod)  setModel(mod);
@@ -77,20 +83,22 @@ export function AIReformat() {
     setError("");
     setOutput("");
     try {
-      const [apiKey, prov, mod] = await Promise.all([
-        api.getSetting("ai_api_key"),
+      const [prov, mod] = await Promise.all([
         api.getSetting("ai_provider"),
         api.getSetting("ai_model"),
       ]);
+      const resolvedProvider = prov || "openai";
+      const keySettingName = resolvedProvider === "anthropic" ? "ai_api_key_anthropic" : "ai_api_key_openai";
+      const apiKey = await api.getSetting(keySettingName);
       const result = await api.reformatText(
         input, style,
-        prov  || "openai",
+        resolvedProvider,
         apiKey || "",
         mod   || "gpt-4o-mini",
       );
       setOutput(result);
       setHasKey(true);
-      setProvider(prov || "openai");
+      setProvider(resolvedProvider);
       setModel(mod || "gpt-4o-mini");
       refreshHistory();
     } catch (err: unknown) {
@@ -327,12 +335,23 @@ export function AIReformat() {
         <div className="flex-1 flex flex-col min-w-0">
           <div className="px-4 py-2 flex items-center justify-between shrink-0">
             <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">Input</span>
-            <button
-              onClick={handleFromClipboard}
-              className="flex items-center gap-1.5 text-[11px] font-semibold text-zinc-400 hover:text-blue-500 transition-colors"
-            >
-              <Clipboard size={12} /> Paste from Clipboard
-            </button>
+            <div className="flex items-center gap-2">
+              {input.trim() && (
+                <button
+                  title="Quick Transform"
+                  onClick={e => setTransformAnchor(e.currentTarget)}
+                  className="flex items-center gap-1 text-[11px] font-semibold text-zinc-400 hover:text-blue-500 transition-colors"
+                >
+                  <Zap size={12} /> Transform
+                </button>
+              )}
+              <button
+                onClick={handleFromClipboard}
+                className="flex items-center gap-1.5 text-[11px] font-semibold text-zinc-400 hover:text-blue-500 transition-colors"
+              >
+                <Clipboard size={12} /> Paste from Clipboard
+              </button>
+            </div>
           </div>
           <textarea
             value={input}
@@ -395,6 +414,15 @@ export function AIReformat() {
           </div>
         </div>
       </div>
+
+      {transformAnchor && (
+        <TransformPopover
+          text={input}
+          anchor={transformAnchor}
+          onTransformed={result => setInput(result)}
+          onClose={() => setTransformAnchor(null)}
+        />
+      )}
 
       {/* ── Action bar ── */}
       <div className="shrink-0 px-7 py-4 border-t border-zinc-100 dark:border-zinc-800/60 flex items-center justify-between bg-white/80 dark:bg-[#1a1a1a]/80 backdrop-blur-sm">

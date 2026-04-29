@@ -1,9 +1,9 @@
 import { useState, useRef } from "react";
 import {
-  BookOpen, Clock, Zap, Layers, AlignLeft, Keyboard,
+  BookOpen, Clock, Zap, Layers, AlignLeft, Keyboard, Sparkles,
   ChevronRight, Search, Pin, Trash2, Copy, Hash,
   Calendar, DollarSign, List, Type, FileText,
-  ArrowRight, Info,
+  ArrowRight, Info, Settings, Plus, Wand2,
 } from "lucide-react";
 
 // ── Platform detection ────────────────────────────────────────────────────────
@@ -26,6 +26,7 @@ const SECTIONS: Section[] = [
   { id: "templates",  label: "Smart Templates",   icon: <Layers size={14} /> },
   { id: "variables",  label: "Variables",         icon: <Hash size={14} /> },
   { id: "queue",      label: "Queue Mode",        icon: <AlignLeft size={14} /> },
+  { id: "ai",         label: "AI Reformat",       icon: <Sparkles size={14} /> },
   { id: "shortcuts",  label: "Keyboard Shortcuts",icon: <Keyboard size={14} /> },
 ];
 
@@ -90,6 +91,7 @@ export function HelpGuide() {
                 { icon: <Zap size={16} />, title: "Quick Paste", desc: "Popup tìm kiếm cực nhanh, mở bằng phím tắt toàn cục" },
                 { icon: <Layers size={16} />, title: "Smart Templates", desc: "Template tái sử dụng với biến số, ngày tháng tự động" },
                 { icon: <AlignLeft size={16} />, title: "Queue Mode", desc: "Copy nhiều thứ, dán tuần tự từng cái một" },
+                { icon: <Sparkles size={16} />, title: "AI Reformat", desc: "Viết lại text bằng AI — email, Slack, tweet, bullets, tóm tắt" },
               ].map(f => (
                 <div key={f.title} className="p-4 bg-zinc-50 dark:bg-zinc-800/40 rounded-xl border border-zinc-200/60 dark:border-zinc-700/40">
                   <div className="flex items-center gap-2 mb-2 text-blue-500">{f.icon}<span className="text-[12px] font-bold text-zinc-800 dark:text-zinc-200">{f.title}</span></div>
@@ -302,6 +304,111 @@ Ghi chú: {{ghi_chu:multiline}}`}</CodeBlock>
             </Tip>
           </Section>
 
+          {/* ═══ AI REFORMAT ════════════════════════════════════════════════ */}
+          <Section id="ai" title="AI Reformat" icon={<Sparkles size={18} />}>
+            <p className="text-[14px] text-zinc-600 dark:text-zinc-400 leading-relaxed">
+              Dùng AI để viết lại, chuẩn hóa hoặc chuyển đổi giọng văn của bất kỳ đoạn text nào — email chuyên nghiệp, Slack message, tweet, bullet points, v.v. — chỉ trong một click.
+            </p>
+
+            <SubSection title="Thiết lập ban đầu">
+              <ol className="space-y-2.5 text-[13px] text-zinc-600 dark:text-zinc-400">
+                {[
+                  { step: "Vào Preferences → AI Integration", detail: "Chọn provider: OpenAI hoặc Anthropic." },
+                  { step: "Dán API key vào ô API Key", detail: 'OpenAI key bắt đầu bằng "sk-…". Anthropic key bắt đầu bằng "sk-ant-…".' },
+                  { step: "Chọn model phù hợp", detail: "GPT-4o mini / Claude Haiku nhanh và rẻ. GPT-4o / Claude Sonnet mạnh hơn." },
+                  { step: "Nhấn Save AI Settings", detail: "Mỗi provider lưu key riêng — có thể đổi qua lại bất kỳ lúc nào." },
+                ].map((s, i) => (
+                  <li key={i} className="flex items-start gap-3">
+                    <span className="shrink-0 w-5 h-5 rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 text-[10px] font-bold flex items-center justify-center mt-0.5">{i + 1}</span>
+                    <div>
+                      <span className="font-semibold text-zinc-700 dark:text-zinc-300">{s.step}</span>
+                      <p className="text-[12px] text-zinc-400 mt-0.5">{s.detail}</p>
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            </SubSection>
+
+            <SubSection title="Các style có sẵn">
+              <div className="grid grid-cols-2 gap-2">
+                {[
+                  { emoji: "📧", name: "Email",       desc: "Email công việc đầy đủ: Subject, greeting, body, sign-off" },
+                  { emoji: "💬", name: "Slack",        desc: "Ngắn gọn, conversational, có bullet khi cần" },
+                  { emoji: "𝕏",  name: "Tweet",        desc: "Dưới 280 ký tự, hook mạnh, có hashtag nếu phù hợp" },
+                  { emoji: "👔", name: "Formal",       desc: "Văn phong trang trọng, chính xác — phù hợp báo cáo, văn thư" },
+                  { emoji: "😊", name: "Casual",       desc: "Giọng thân thiện, tự nhiên như nói chuyện" },
+                  { emoji: "•",  name: "Bullets",      desc: "Chuyển thành danh sách có cấu trúc, dễ đọc" },
+                  { emoji: "📝", name: "Summary",      desc: "Tóm tắt 3–5 câu, giữ ý chính" },
+                  { emoji: "✓",  name: "Fix Grammar",  desc: "Sửa lỗi chính tả, ngữ pháp — giữ nguyên giọng văn" },
+                ].map(s => (
+                  <div key={s.name} className="flex items-start gap-2.5 p-3 bg-zinc-50 dark:bg-zinc-800/40 rounded-xl border border-zinc-200/40 dark:border-zinc-700/30">
+                    <span className="text-[16px] leading-none mt-0.5 shrink-0">{s.emoji}</span>
+                    <div>
+                      <p className="text-[12px] font-bold text-zinc-700 dark:text-zinc-300">{s.name}</p>
+                      <p className="text-[11px] text-zinc-500 leading-relaxed">{s.desc}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </SubSection>
+
+            <SubSection title="Cách dùng cơ bản">
+              <div className="space-y-2 text-[13px] text-zinc-600 dark:text-zinc-400">
+                {[
+                  { icon: <Copy size={13} />,      text: "Dán text vào ô Input bên trái (hoặc nhấn Paste from Clipboard)" },
+                  { icon: <Sparkles size={13} />,  text: "Chọn style muốn áp dụng từ thanh chip phía trên" },
+                  { icon: <Wand2 size={13} />,     text: `Nhấn "Reformat" hoặc nhấn ${isMac ? "⌘↵" : "Ctrl+Enter"} để chạy AI` },
+                  { icon: <Copy size={13} />,      text: 'Kết quả hiển thị bên phải — nhấn "Copy" hoặc "Paste ⚡" để dùng ngay' },
+                ].map((s, i) => (
+                  <div key={i} className="flex items-start gap-3 py-2.5 px-3 rounded-xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200/40 dark:border-zinc-700/30">
+                    <span className="text-blue-400 mt-0.5 shrink-0">{s.icon}</span>
+                    <span>{s.text}</span>
+                  </div>
+                ))}
+              </div>
+            </SubSection>
+
+            <SubSection title="Custom Skills — Tạo style riêng">
+              <p className="text-[13px] text-zinc-500 leading-relaxed mb-3">
+                Ngoài 8 style có sẵn, bạn có thể tạo skill tùy chỉnh với system prompt riêng để AI xử lý theo đúng yêu cầu của bạn.
+              </p>
+              <div className="space-y-2">
+                {[
+                  { icon: <Plus size={13} />,     title: 'Nhấn "+ Skill"', desc: "Nút dạng dashed border ở cuối thanh style picker." },
+                  { icon: <Sparkles size={13} />, title: "Điền thông tin",  desc: "Chọn emoji, đặt tên skill, viết system prompt mô tả cách AI nên xử lý text." },
+                  { icon: <Settings size={13} />, title: "Xóa skill",       desc: "Hover lên chip skill tùy chỉnh → nhấn nút ✕ đỏ xuất hiện ở góc." },
+                ].map(s => (
+                  <div key={s.title} className="flex items-start gap-3 py-2.5 px-3 rounded-xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200/40 dark:border-zinc-700/30">
+                    <span className="text-blue-400 mt-0.5 shrink-0">{s.icon}</span>
+                    <div>
+                      <span className="text-[12px] font-bold text-zinc-700 dark:text-zinc-300 mr-2">{s.title}</span>
+                      <span className="text-[12px] text-zinc-500">{s.desc}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <CodeBlock label="Ví dụ system prompt cho skill &quot;Dịch sang tiếng Việt&quot;">{`Bạn là dịch giả chuyên nghiệp Anh–Việt. Dịch toàn bộ nội dung input sang tiếng Việt tự nhiên, giữ nguyên ý nghĩa và giọng văn của tác giả. Không giải thích, không thêm nội dung — chỉ xuất bản dịch.`}</CodeBlock>
+            </SubSection>
+
+            <SubSection title="Generate Template bằng AI">
+              <p className="text-[13px] text-zinc-500 leading-relaxed">
+                Trong tab Smart Templates, nhấn nút <strong>Generate with AI</strong> (dashed) phía trên ô Title. Mô tả template bạn muốn bằng tiếng Việt hoặc tiếng Anh — AI sẽ tạo tự động title và nội dung có sẵn biến số.
+              </p>
+              <CodeBlock label="Ví dụ mô tả">{`Template báo giá cho khách hàng, có tên công ty, tên dịch vụ, giá tiền VND và ngày hiệu lực`}</CodeBlock>
+            </SubSection>
+
+            <SubSection title="Lịch sử reformat">
+              <p className="text-[13px] text-zinc-500 leading-relaxed">
+                Nhấn nút <strong>History</strong> ở góc trên phải màn hình AI Reformat để xem 10 lần reformat gần nhất. Click vào bất kỳ mục nào để load lại input và output tương ứng.
+              </p>
+            </SubSection>
+
+            <Tip>
+              API key được lưu <strong>hoàn toàn local</strong> trên máy, không bao giờ rời khỏi thiết bị của bạn ngoài lúc gọi trực tiếp đến API của OpenAI/Anthropic.
+            </Tip>
+          </Section>
+
           {/* ═══ SHORTCUTS ══════════════════════════════════════════════════ */}
           <Section id="shortcuts" title="Keyboard Shortcuts" icon={<Keyboard size={18} />}>
             <SubSection title="Toàn cục (hoạt động mọi nơi)">
@@ -331,6 +438,12 @@ Ghi chú: {{ghi_chu:multiline}}`}</CodeBlock>
                 ["Tab",    "Chuyển sang ô biến tiếp theo"],
                 ["Enter",  "Xác nhận và đến bước preview"],
                 ["Esc",    "Đóng / hủy"],
+              ]} />
+            </SubSection>
+
+            <SubSection title="Trong AI Reformat">
+              <ShortcutTable rows={[
+                [isMac ? "⌘↵" : "Ctrl+Enter", "Chạy Reformat"],
               ]} />
             </SubSection>
 

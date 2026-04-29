@@ -99,6 +99,8 @@ fn run_migrations(conn: &Connection) {
             ('hotkey_queue_next', 'CmdOrCtrl+Shift+N'),
             ('ai_provider', 'openai'),
             ('ai_api_key', ''),
+            ('ai_api_key_openai', ''),
+            ('ai_api_key_anthropic', ''),
             ('ai_model', 'gpt-4o-mini'),
             ('theme', 'system');
     ",

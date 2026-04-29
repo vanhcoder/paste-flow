@@ -186,28 +186,34 @@ export function GeneralSettings() {
   const [hotkeys, setHotkeys] = useState<Record<string, string>>({});
 
   // AI settings
-  const [aiProvider, setAiProvider] = useState<"openai" | "anthropic">("openai");
-  const [aiModel, setAiModel]       = useState("gpt-4o-mini");
-  const [aiApiKey, setAiApiKey]     = useState("");
-  const [showKey, setShowKey]       = useState(false);
-  const [aiSaving, setAiSaving]     = useState(false);
-  const [aiSaved, setAiSaved]       = useState(false);
+  const [aiProvider, setAiProvider]       = useState<"openai" | "anthropic">("openai");
+  const [aiModel, setAiModel]             = useState("gpt-4o-mini");
+  const [aiKeyOpenAI, setAiKeyOpenAI]     = useState("");
+  const [aiKeyAnthropic, setAiKeyAnthropic] = useState("");
+  const [showKey, setShowKey]             = useState(false);
+  const [aiSaving, setAiSaving]           = useState(false);
+  const [aiSaved, setAiSaved]             = useState(false);
+
+  const aiApiKey    = aiProvider === "anthropic" ? aiKeyAnthropic : aiKeyOpenAI;
+  const setAiApiKey = aiProvider === "anthropic" ? setAiKeyAnthropic : setAiKeyOpenAI;
 
   useEffect(() => {
     async function loadSettings() {
       try {
-        const [enabled, hk, key, prov, mod] = await Promise.all([
+        const [enabled, hk, keyOai, keyAnt, prov, mod] = await Promise.all([
           isEnabled(),
           api.getHotkeys(),
-          api.getSetting("ai_api_key"),
+          api.getSetting("ai_api_key_openai"),
+          api.getSetting("ai_api_key_anthropic"),
           api.getSetting("ai_provider"),
           api.getSetting("ai_model"),
         ]);
         setAutostart(enabled);
         setHotkeys(hk);
-        if (key)  setAiApiKey(key);
-        if (prov) setAiProvider(prov as "openai" | "anthropic");
-        if (mod)  setAiModel(mod);
+        if (keyOai) setAiKeyOpenAI(keyOai);
+        if (keyAnt) setAiKeyAnthropic(keyAnt);
+        if (prov)   setAiProvider(prov as "openai" | "anthropic");
+        if (mod)    setAiModel(mod);
       } catch {
         // ignore load errors
       } finally {
@@ -236,7 +242,8 @@ export function GeneralSettings() {
     setAiSaving(true);
     try {
       await Promise.all([
-        api.setSetting("ai_api_key", aiApiKey.trim()),
+        api.setSetting("ai_api_key_openai", aiKeyOpenAI.trim()),
+        api.setSetting("ai_api_key_anthropic", aiKeyAnthropic.trim()),
         api.setSetting("ai_provider", aiProvider),
         api.setSetting("ai_model", aiModel),
       ]);

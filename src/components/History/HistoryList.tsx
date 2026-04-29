@@ -8,6 +8,7 @@ export function HistoryList() {
     useClipboardStore();
   const [searchQuery, setSearchQuery] = useState("");
   const [activeFilter, setActiveFilter] = useState<"all" | "pinned">("all");
+  const [confirmingPurge, setConfirmingPurge] = useState(false);
 
   useEffect(() => {
     load();
@@ -40,14 +41,29 @@ export function HistoryList() {
           <h2 className="text-[17px] font-bold text-zinc-900 dark:text-zinc-100 font-display tracking-tight">
             All Journals
           </h2>
-          <button
-            onClick={() => {
-              if (confirm("Clear all unpinned items?")) clearAll();
-            }}
-            className="text-[11px] font-bold text-zinc-400 hover:text-red-500 transition-colors uppercase tracking-widest px-2 py-1 rounded-md hover:bg-red-500/5"
-          >
-            Purge
-          </button>
+          {confirmingPurge ? (
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setConfirmingPurge(false)}
+                className="text-[11px] font-bold text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors px-2 py-1 rounded-md hover:bg-zinc-100 dark:hover:bg-zinc-800"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => { clearAll(); setConfirmingPurge(false); }}
+                className="text-[11px] font-bold text-white bg-red-500 hover:bg-red-600 transition-colors px-2 py-1 rounded-md"
+              >
+                Confirm
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setConfirmingPurge(true)}
+              className="text-[11px] font-bold text-zinc-400 hover:text-red-500 transition-colors uppercase tracking-widest px-2 py-1 rounded-md hover:bg-red-500/5"
+            >
+              Purge
+            </button>
+          )}
         </div>
 
         <div className="flex items-center gap-3">

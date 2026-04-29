@@ -31,13 +31,7 @@ pub fn update_window_visibility(app: &AppHandle, mode: &QueueMode) {
                 // Ensure transparent background each time the window is shown.
                 // On Windows, WebView2 can reset the background color after hide/show.
                 //
-                // TODO(macOS): Transparency is controlled by `"transparent": true`
-                //   in tauri.conf.json. No extra call needed here, but if you add
-                //   NSVisualEffectView for vibrancy, re-apply it here too.
-                //
-                // TODO(Linux): Same as macOS — Tauri handles it via GTK transparency.
-                //   If using custom compositor hints (e.g. _NET_WM_WINDOW_TYPE), re-apply here.
-                #[cfg(target_os = "windows")]
+                #[cfg(any(target_os = "windows", target_os = "macos"))]
                 {
                     use tauri::window::Color;
                     let _ = win.set_background_color(Some(Color(0, 0, 0, 0)));

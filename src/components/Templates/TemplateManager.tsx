@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { useTemplateStore } from "../../stores/templateStore";
+import { toast } from "../../stores/toastStore";
 import {
   Plus, Hash, FolderPlus, Trash2, Edit3, Pin,
-  ArrowLeft, Zap, Layers, ChevronRight, FileText,
+  ArrowLeft, Zap, Layers, ChevronRight, FileText, Sparkles, Loader2,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { api, Template } from "../../lib/tauri";
@@ -29,6 +30,11 @@ export function TemplateManager() {
   const [newContent, setNewContent] = useState("");
   const [editorGroupId, setEditorGroupId] = useState<string | null>(null);
   const [expandingTemplate, setExpandingTemplate] = useState<Template | null>(null);
+  const [generating, setGenerating] = useState(false);
+  const [generatePrompt, setGeneratePrompt] = useState("");
+  const [showGenerateInput, setShowGenerateInput] = useState(false);
+  const [addingCollection, setAddingCollection] = useState(false);
+  const [newCollectionName, setNewCollectionName] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => { loadGroups(); setSelectedGroup(null); }, []);
@@ -86,7 +92,34 @@ export function TemplateManager() {
         await addTemplate(newTitle.trim(), newContent.trim(), editorGroupId);
       }
       closeEditor();
-    } catch (e) { alert("Failed: " + e); }
+    } catch (e) { toast.error("Failed to save template: " + e); }
+  };
+
+  const handleGenerate = async () => {
+    if (!generatePrompt.trim() || generating) return;
+    setGenerating(true);
+    try {
+      const [apiKey, provider, model] = await Promise.all([
+        api.getSetting("ai_api_key"),
+        api.getSetting("ai_provider"),
+        api.getSetting("ai_model"),
+      ]);
+      const result = await api.generateTemplate(
+        generatePrompt.trim(),
+        provider || "openai",
+        apiKey   || "",
+        model    || "gpt-4o-mini",
+      );
+      setNewTitle(result.title);
+      setNewContent(result.content);
+      setShowGenerateInput(false);
+      setGeneratePrompt("");
+      toast.success("Template generated!");
+    } catch (e) {
+      toast.error(String(e));
+    } finally {
+      setGenerating(false);
+    }
   };
 
   // ── Paste ───────────────────────────────────────────────────────────────────
@@ -157,12 +190,55 @@ export function TemplateManager() {
         )}
 
         <div className="mt-auto p-3 border-t border-zinc-200/40 dark:border-zinc-800/40">
-          <button
-            onClick={() => { const n = prompt("Collection name:"); if (n) addGroup(n); }}
-            className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-[12px] font-semibold text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
-          >
-            <FolderPlus size={13} /> New Collection
-          </button>
+          {addingCollection ? (
+            <div className="flex flex-col gap-1.5">
+              <input
+                autoFocus
+                type="text"
+                value={newCollectionName}
+                onChange={e => setNewCollectionName(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === "Enter" && newCollectionName.trim()) {
+                    addGroup(newCollectionName.trim());
+                    setNewCollectionName("");
+                    setAddingCollection(false);
+                  } else if (e.key === "Escape") {
+                    setNewCollectionName("");
+                    setAddingCollection(false);
+                  }
+                }}
+                placeholder="Collection name..."
+                className="w-full px-3 py-1.5 bg-white dark:bg-zinc-900 border border-blue-400 dark:border-blue-500 rounded-xl text-[12px] outline-none focus:ring-2 focus:ring-blue-500/20"
+              />
+              <div className="flex gap-1">
+                <button
+                  onClick={() => { setNewCollectionName(""); setAddingCollection(false); }}
+                  className="flex-1 py-1 rounded-lg text-[11px] font-semibold text-zinc-400 hover:text-zinc-600 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => {
+                    if (newCollectionName.trim()) {
+                      addGroup(newCollectionName.trim());
+                      setNewCollectionName("");
+                      setAddingCollection(false);
+                    }
+                  }}
+                  className="flex-1 py-1 rounded-lg text-[11px] font-bold bg-blue-600 text-white hover:bg-blue-700 transition-colors"
+                >
+                  Add
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              onClick={() => setAddingCollection(true)}
+              className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-[12px] font-semibold text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+            >
+              <FolderPlus size={13} /> New Collection
+            </button>
+          )}
         </div>
       </aside>
 
@@ -199,7 +275,7 @@ export function TemplateManager() {
                 </div>
                 <button
                   onClick={openCreate}
-                  className="flex items-center gap-2 px-4 py-2.5 bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 rounded-xl text-[13px] font-bold shadow-lg shadow-black/10 hover:scale-[1.02] active:scale-[0.98] transition-transform"
+                  className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-[13px] font-bold shadow-lg shadow-blue-500/20 active:scale-[0.98] transition-all"
                 >
                   <Plus size={14} /> New Template
                 </button>
@@ -259,6 +335,56 @@ export function TemplateManager() {
               {/* Editor body — scrollable */}
               <div className="flex-1 overflow-y-auto hide-scrollbar">
                 <div className="max-w-2xl mx-auto px-7 py-6 space-y-6">
+
+                  {/* AI Generate */}
+                  {showGenerateInput ? (
+                    <div className="p-4 bg-blue-50/60 dark:bg-blue-900/10 border border-blue-200/50 dark:border-blue-700/30 rounded-2xl space-y-3">
+                      <p className="text-[11px] font-bold text-blue-600 dark:text-blue-400 uppercase tracking-widest flex items-center gap-1.5">
+                        <Sparkles size={11} /> Generate with AI
+                      </p>
+                      <textarea
+                        autoFocus
+                        rows={2}
+                        value={generatePrompt}
+                        onChange={e => setGeneratePrompt(e.target.value)}
+                        onKeyDown={e => {
+                          if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+                            e.preventDefault();
+                            handleGenerate();
+                          } else if (e.key === "Escape") {
+                            setShowGenerateInput(false);
+                            setGeneratePrompt("");
+                          }
+                        }}
+                        placeholder="Describe the template... e.g. 'A sales follow-up email with client name, product, and meeting date'"
+                        className="w-full bg-white dark:bg-zinc-900 border border-blue-200 dark:border-blue-700/50 rounded-xl px-3 py-2 text-[13px] text-zinc-700 dark:text-zinc-300 placeholder:text-zinc-400 dark:placeholder:text-zinc-600 outline-none focus:ring-2 focus:ring-blue-500/20 resize-none leading-relaxed"
+                      />
+                      <div className="flex items-center justify-between">
+                        <button
+                          onClick={() => { setShowGenerateInput(false); setGeneratePrompt(""); }}
+                          className="text-[12px] font-semibold text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          onClick={handleGenerate}
+                          disabled={!generatePrompt.trim() || generating}
+                          className="flex items-center gap-2 px-4 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-xl text-[12px] font-bold transition-all"
+                        >
+                          {generating
+                            ? <><Loader2 size={12} className="animate-spin" /> Generating...</>
+                            : <><Sparkles size={12} /> Generate</>}
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setShowGenerateInput(true)}
+                      className="w-full flex items-center justify-center gap-2 py-2 rounded-xl border border-dashed border-zinc-200 dark:border-zinc-700 text-[12px] font-semibold text-zinc-400 hover:text-blue-500 hover:border-blue-300 dark:hover:border-blue-600 transition-colors"
+                    >
+                      <Sparkles size={13} /> Generate with AI
+                    </button>
+                  )}
 
                   {/* Title */}
                   <div>
@@ -474,7 +600,7 @@ function CollectionChip({
       onClick={onClick}
       className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-semibold border transition-all ${
         active
-          ? "bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 border-transparent shadow-sm"
+          ? "bg-blue-600 text-white border-transparent shadow-sm"
           : "text-zinc-500 dark:text-zinc-400 border-zinc-200 dark:border-zinc-700 hover:border-zinc-300 dark:hover:border-zinc-600 hover:text-zinc-700 dark:hover:text-zinc-200"
       }`}
     >
@@ -496,7 +622,7 @@ function EmptyState({ onNew }: { onNew: () => void }) {
       </p>
       <button
         onClick={onNew}
-        className="flex items-center gap-2 px-5 py-2.5 bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 rounded-xl text-[13px] font-bold shadow-lg shadow-black/10 hover:scale-[1.02] transition-transform"
+        className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-[13px] font-bold shadow-lg shadow-blue-500/20 active:scale-[0.98] transition-all"
       >
         <Plus size={14} /> Create first template
       </button>
@@ -520,7 +646,7 @@ function SidebarItem({
       onClick={onClick}
       className={`w-full text-left px-3 py-2 rounded-xl text-[13px] transition-all duration-150 flex items-center gap-2.5 ${
         active
-          ? "bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 font-bold shadow-sm"
+          ? "bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 font-semibold"
           : "text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800"
       }`}
     >

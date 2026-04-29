@@ -63,6 +63,24 @@ export interface QueueStatus {
   next_preview: string | null;
 }
 
+export interface AiSkill {
+  id: string;
+  name: string;
+  emoji: string;
+  prompt: string;
+  use_count: number;
+  created_at: string;
+}
+
+export interface ReformatRecord {
+  id: string;
+  original_text: string;
+  style: string;
+  reformatted: string;
+  model_used: string;
+  created_at: string;
+}
+
 export interface QueueProgress {
   pasted_index: number;
   remaining: number;
@@ -144,6 +162,25 @@ export const api = {
 
   updateHotkey: (settingKey: string, shortcut: string) =>
     invoke<void>("update_hotkey", { settingKey, shortcut }),
+
+  // ── AI Reformat ──
+  reformatText: (text: string, style: string, provider: string, apiKey: string, model: string) =>
+    invoke<string>("reformat_text", { text, style, provider, apiKey, model }),
+
+  listAiSkills: () =>
+    invoke<AiSkill[]>("list_ai_skills"),
+
+  createAiSkill: (name: string, emoji: string, prompt: string) =>
+    invoke<AiSkill>("create_ai_skill", { name, emoji, prompt }),
+
+  deleteAiSkill: (id: string) =>
+    invoke<void>("delete_ai_skill", { id }),
+
+  getReformatHistory: (limit?: number) =>
+    invoke<ReformatRecord[]>("get_reformat_history", { limit }),
+
+  generateTemplate: (description: string, provider: string, apiKey: string, model: string) =>
+    invoke<{ title: string; content: string }>("generate_template", { description, provider, apiKey, model }),
 
   // ── Paste Queue ──
   toggleQueueMode: () =>

@@ -124,6 +124,27 @@ fn run_migrations(conn: &Connection) {
     ").expect("Failed to create variable_history table");
 
     migrate_variable_format(conn);
+
+    // ── AI Phase 5 migrations ──
+    conn.execute_batch("
+        CREATE TABLE IF NOT EXISTS ai_skills (
+            id         TEXT PRIMARY KEY,
+            name       TEXT NOT NULL,
+            emoji      TEXT NOT NULL DEFAULT '🤖',
+            prompt     TEXT NOT NULL,
+            use_count  INTEGER DEFAULT 0,
+            created_at TEXT DEFAULT (datetime('now','localtime'))
+        );
+
+        CREATE TABLE IF NOT EXISTS reformat_history (
+            id            TEXT PRIMARY KEY,
+            original_text TEXT NOT NULL,
+            style         TEXT NOT NULL,
+            reformatted   TEXT NOT NULL,
+            model_used    TEXT NOT NULL,
+            created_at    TEXT DEFAULT (datetime('now','localtime'))
+        );
+    ").expect("Failed to run AI migrations");
 }
 
 /// Migrate old variable format (["name"]) to new format ([{"name":"name","type":"text"}])

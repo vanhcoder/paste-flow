@@ -1,24 +1,16 @@
 use arboard::Clipboard;
 use std::thread;
 use std::time::Duration;
+use tauri::State;
 use crate::platform;
 
-/// Queue paste: write `content` to clipboard, restore focus to the previously
-/// captured target window, then simulate the OS paste shortcut (Ctrl/Cmd+V).
-///
-/// `target_window` is a `WindowHandle` captured with `platform::get_active_window()`
-/// BEFORE the queue-indicator window became visible. Pass `platform::NULL_WINDOW`
-/// if no window was captured (paste shortcut will still fire; the OS will deliver
-/// it to whatever app currently has focus).
+/// Queue paste: write `content` to clipboard, restore focus, then Ctrl/Cmd+V.
 pub fn paste_to_target(content: String, target_window: platform::WindowHandle) -> Result<(), String> {
     let mut cb = Clipboard::new().map_err(|e| e.to_string())?;
     cb.set_text(&content).map_err(|e| e.to_string())?;
 
-    // Give the OS time for hotkey modifier keys (e.g. Ctrl+Shift+N) to
-    // physically release before we send our own synthetic keystroke.
     thread::sleep(Duration::from_millis(150));
 
-    // Restore focus to the original app so Ctrl/Cmd+V reaches the right window.
     if target_window != platform::NULL_WINDOW {
         platform::restore_window_focus(target_window);
         thread::sleep(Duration::from_millis(50));
@@ -27,19 +19,37 @@ pub fn paste_to_target(content: String, target_window: platform::WindowHandle) -
     platform::simulate_paste()
 }
 
-/// Tauri command: paste clipboard content to whichever app was active before
-/// the quick-paste overlay was shown.
+/// Tauri command: paste to the app that was frontmost before quick-paste opened.
 ///
-/// The caller is expected to hide our window BEFORE calling this command so
-/// the OS can return focus to the previous app. The 300 ms sleep gives the
-/// window-hide animation and focus-transfer time to complete.
+/// Order of operations matters on macOS:
+///   1. Restore focus to the target app FIRST — before any sleep and before the
+///      quick-paste window hides — so macOS never gets a chance to activate our
+///      main window in the gap between hide() and restore.
+///   2. Set clipboard text.
+///   3. Sleep to let focus fully transfer and modifier keys physically release.
+///   4. Simulate Cmd+V via CGEvent.
+///
+/// The caller (JS) hides the quick-paste window AFTER this command resolves.
 #[tauri::command]
-pub fn paste_to_active_app(content: String) -> Result<(), String> {
+pub fn paste_to_active_app(
+    content: String,
+    target: State<'_, crate::QuickPasteTarget>,
+) -> Result<(), String> {
+    let target_window = *target.0.lock().unwrap();
+    let our_pid = std::process::id() as platform::WindowHandle;
+
+    // Step 1 — restore focus immediately, before any sleep.
+    if target_window != platform::NULL_WINDOW && target_window != our_pid {
+        platform::restore_window_focus(target_window);
+    }
+
+    // Step 2 — write to clipboard.
     let mut cb = Clipboard::new().map_err(|e| e.to_string())?;
     cb.set_text(&content).map_err(|e| e.to_string())?;
 
-    // Wait for our window to hide and the OS to return focus to the previous app.
-    thread::sleep(Duration::from_millis(300));
+    // Step 3 — wait for focus transfer and modifier-key release.
+    thread::sleep(Duration::from_millis(200));
 
+    // Step 4 — send Cmd+V.
     platform::simulate_paste()
 }

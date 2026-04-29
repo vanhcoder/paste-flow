@@ -6,6 +6,11 @@ import {
   ArrowRight, Info,
 } from "lucide-react";
 
+// ── Platform detection ────────────────────────────────────────────────────────
+const isMac = navigator.platform.toUpperCase().startsWith("MAC");
+const mod = isMac ? "⌘" : "Ctrl";
+const shift = isMac ? "⇧" : "Shift";
+
 // ── Section registry ──────────────────────────────────────────────────────────
 
 interface Section {
@@ -97,7 +102,7 @@ export function HelpGuide() {
           {/* ═══ CLIPBOARD HISTORY ══════════════════════════════════════════ */}
           <Section id="history" title="Clipboard History" icon={<Clock size={18} />}>
             <p className="text-[14px] text-zinc-600 dark:text-zinc-400 leading-relaxed">
-              Mọi thứ bạn <kbd className="kbd">Ctrl+C</kbd> đều được lưu tự động. Không cần làm gì thêm.
+              Mọi thứ bạn <kbd className="kbd">{isMac ? "⌘C" : "Ctrl+C"}</kbd> đều được lưu tự động. Không cần làm gì thêm.
             </p>
 
             <FeatureList items={[
@@ -121,8 +126,8 @@ export function HelpGuide() {
             <div className="my-4 p-4 bg-zinc-900 dark:bg-zinc-950 rounded-xl text-center">
               <p className="text-[11px] text-zinc-500 mb-2 uppercase tracking-widest font-bold">Mở Quick Paste</p>
               <div className="flex items-center justify-center gap-2">
-                <Kbd>Ctrl</Kbd><span className="text-zinc-600">+</span>
-                <Kbd>Shift</Kbd><span className="text-zinc-600">+</span>
+                <Kbd>{mod}</Kbd><span className="text-zinc-600">+</span>
+                <Kbd>{shift}</Kbd><span className="text-zinc-600">+</span>
                 <Kbd>V</Kbd>
               </div>
               <p className="text-[10px] text-zinc-600 mt-2">Có thể đổi phím tắt trong Preferences → Hotkeys</p>
@@ -136,10 +141,10 @@ export function HelpGuide() {
 
             <SubSection title="Điều hướng bằng bàn phím">
               <ShortcutTable rows={[
-                ["↑ ↓",           "Di chuyển giữa các kết quả"],
-                ["Enter",         "Dán item đang chọn"],
-                ["Ctrl + 1–9",    "Dán nhanh theo số thứ tự"],
-                ["Esc",           "Đóng popup"],
+                ["↑ ↓",                 "Di chuyển giữa các kết quả"],
+                ["Enter",               "Dán item đang chọn"],
+                [`${mod} + 1–9`,        "Dán nhanh theo số thứ tự"],
+                ["Esc",                 "Đóng popup"],
               ]} />
             </SubSection>
           </Section>
@@ -274,11 +279,11 @@ Ghi chú: {{ghi_chu:multiline}}`}</CodeBlock>
             <SubSection title="Cách dùng">
               <ol className="space-y-3 text-[13px] text-zinc-600 dark:text-zinc-400">
                 {[
-                  { key: "Ctrl+Shift+Q", desc: "Bật Queue Mode. Biểu tượng nhỏ xuất hiện ở góc màn hình." },
-                  { key: "Ctrl+C",       desc: "Copy bình thường — mỗi lần copy sẽ thêm vào hàng đợi." },
-                  { key: "Ctrl+Shift+Q", desc: "Nhấn lần 2 để chuyển sang Paste Mode (bắt đầu dán)." },
-                  { key: "Ctrl+Shift+N", desc: "Dán item tiếp theo từ hàng đợi vào vị trí con trỏ." },
-                  { key: "Ctrl+Shift+Q", desc: "Nhấn lần 3 để hủy và thoát Queue Mode." },
+                  { key: `${mod}+${shift}+Q`, desc: "Bật Queue Mode. Biểu tượng nhỏ xuất hiện ở góc màn hình." },
+                  { key: isMac ? "⌘+C" : "Ctrl+C", desc: "Copy bình thường — mỗi lần copy sẽ thêm vào hàng đợi." },
+                  { key: `${mod}+${shift}+Q`, desc: "Nhấn lần 2 để chuyển sang Paste Mode (bắt đầu dán)." },
+                  { key: `${mod}+${shift}+N`, desc: "Dán item tiếp theo từ hàng đợi vào vị trí con trỏ." },
+                  { key: `${mod}+${shift}+Q`, desc: "Nhấn lần 3 để hủy và thoát Queue Mode." },
                 ].map((step, i) => (
                   <li key={i} className="flex items-start gap-3">
                     <span className="shrink-0 w-5 h-5 rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 text-[10px] font-bold flex items-center justify-center mt-0.5">{i + 1}</span>
@@ -301,9 +306,9 @@ Ghi chú: {{ghi_chu:multiline}}`}</CodeBlock>
           <Section id="shortcuts" title="Keyboard Shortcuts" icon={<Keyboard size={18} />}>
             <SubSection title="Toàn cục (hoạt động mọi nơi)">
               <ShortcutTable rows={[
-                ["Ctrl+Shift+V", "Mở/đóng Quick Paste popup"],
-                ["Ctrl+Shift+Q", "Bật / chuyển trạng thái Queue Mode"],
-                ["Ctrl+Shift+N", "Dán item tiếp theo từ queue"],
+                [`${mod}+${shift}+V`, "Mở/đóng Quick Paste popup"],
+                [`${mod}+${shift}+Q`, "Bật / chuyển trạng thái Queue Mode"],
+                [`${mod}+${shift}+N`, "Dán item tiếp theo từ queue"],
               ]} />
               <p className="text-[11px] text-zinc-400 mt-2">
                 Tất cả phím tắt toàn cục có thể tùy chỉnh trong <strong>Preferences → Global Hotkeys</strong>.
@@ -312,12 +317,12 @@ Ghi chú: {{ghi_chu:multiline}}`}</CodeBlock>
 
             <SubSection title="Trong Quick Paste popup">
               <ShortcutTable rows={[
-                ["↑ / ↓",       "Di chuyển lên/xuống"],
-                ["Enter",       "Dán item đang chọn"],
-                ["Ctrl + 1–9",  "Dán nhanh theo số thứ tự hiển thị"],
-                ["Esc",         "Đóng popup"],
-                ["C",           "Copy (trong màn hình preview)"],
-                ["Backspace",   "Quay lại (trong màn hình preview)"],
+                ["↑ / ↓",             "Di chuyển lên/xuống"],
+                ["Enter",             "Dán item đang chọn"],
+                [`${mod} + 1–9`,      "Dán nhanh theo số thứ tự hiển thị"],
+                ["Esc",               "Đóng popup"],
+                ["C",                 "Copy (trong màn hình preview)"],
+                ["Backspace",         "Quay lại (trong màn hình preview)"],
               ]} />
             </SubSection>
 
@@ -328,6 +333,25 @@ Ghi chú: {{ghi_chu:multiline}}`}</CodeBlock>
                 ["Esc",    "Đóng / hủy"],
               ]} />
             </SubSection>
+
+            {isMac && (
+              <div className="mt-4 p-3 bg-zinc-50 dark:bg-zinc-800/40 rounded-xl border border-zinc-200/40 dark:border-zinc-700/30">
+                <p className="text-[11px] font-bold text-zinc-500 mb-2 uppercase tracking-widest">Ký hiệu macOS</p>
+                <div className="grid grid-cols-2 gap-x-6 gap-y-1.5">
+                  {[
+                    ["⌘", "Command"],
+                    ["⇧", "Shift"],
+                    ["⌥", "Option"],
+                    ["⌃", "Control"],
+                  ].map(([sym, name]) => (
+                    <div key={sym} className="flex items-center gap-2">
+                      <Kbd small>{sym}</Kbd>
+                      <span className="text-[11px] text-zinc-500">{name}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </Section>
 
           {/* Bottom spacer */}

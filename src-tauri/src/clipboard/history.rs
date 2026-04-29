@@ -70,7 +70,7 @@ pub fn get_clip_content(
     )
     .map_err(|e| e.to_string())?;
 
-    let content: String = conn
+    let content: Option<String> = conn
         .query_row(
             "SELECT content_text FROM clipboard_items WHERE id = ?1",
             [&id],
@@ -78,7 +78,7 @@ pub fn get_clip_content(
         )
         .map_err(|e| e.to_string())?;
 
-    Ok(content)
+    content.ok_or_else(|| "Item has no text content".to_string())
 }
 
 #[tauri::command]

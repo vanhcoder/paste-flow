@@ -10,27 +10,35 @@ import {
   ShieldCheck,
   ChevronRight,
   BookOpen,
+  Sun,
+  Moon,
+  Monitor,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { GeneralSettings } from "../components/Settings/GeneralSettings";
+import { AIReformat } from "../components/AI/AIReformat";
+import { Toaster } from "../components/UI/Toaster";
+import { type Theme, getSavedTheme, saveTheme } from "../lib/theme";
 
 type Tab = "history" | "templates" | "ai" | "settings" | "help";
 
 export default function MainWindow() {
   const [activeTab, setActiveTab] = useState<Tab>("history");
+  const [theme, setTheme] = useState<Theme>(getSavedTheme);
+
+  const handleTheme = (t: Theme) => {
+    setTheme(t);
+    saveTheme(t);
+  };
 
   return (
-    <div className="flex h-screen bg-zinc-50 dark:bg-[#1a1a1a] text-zinc-900 dark:text-zinc-200 overflow-hidden font-sans border border-zinc-200 dark:border-zinc-800 rounded-[12px] shadow-2xl">
+    <div className="flex h-screen bg-zinc-50 dark:bg-[#1a1a1a] text-zinc-900 dark:text-zinc-200 overflow-hidden font-sans">
       {/* Sidebar - macOS Style */}
       <aside className="w-60 flex flex-col bg-zinc-100/70 dark:bg-zinc-900/40 backdrop-blur-2xl border-r border-zinc-200/30 dark:border-zinc-800/20 select-none">
-        {/* macOS Window Controls (Visual only) */}
-        <div className="p-5 flex gap-2">
-          <div className="w-3.5 h-3.5 rounded-full bg-[#FF5F56] shadow-inner shadow-black/10" />
-          <div className="w-3.5 h-3.5 rounded-full bg-[#FFBD2E] shadow-inner shadow-black/10" />
-          <div className="w-3.5 h-3.5 rounded-full bg-[#27C93F] shadow-inner shadow-black/10" />
-        </div>
+        {/* Drag region — covers the native traffic-lights overlay area (≈36px) */}
+        <div className="h-9 w-full shrink-0" data-tauri-drag-region />
 
-        <div className="p-6 pt-2 pb-8 flex items-center gap-3">
+        <div className="px-6 pb-8 flex items-center gap-3">
           <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-blue-500/20">
             <AppWindow size={22} strokeWidth={2.2} />
           </div>
@@ -86,6 +94,33 @@ export default function MainWindow() {
           />
         </div>
 
+        {/* Theme toggle */}
+        <div className="mx-4 mb-2 flex items-center justify-between px-3 py-2 rounded-xl bg-zinc-200/50 dark:bg-zinc-800/50">
+          <span className="text-[10px] font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-widest">Theme</span>
+          <div className="flex gap-1">
+            {(
+              [
+                { value: "light" as Theme, icon: <Sun size={12} /> },
+                { value: "system" as Theme, icon: <Monitor size={12} /> },
+                { value: "dark" as Theme, icon: <Moon size={12} /> },
+              ] as const
+            ).map(({ value, icon }) => (
+              <button
+                key={value}
+                onClick={() => handleTheme(value)}
+                className={`p-1.5 rounded-lg transition-all ${
+                  theme === value
+                    ? "bg-white dark:bg-zinc-700 text-blue-600 dark:text-blue-400 shadow-sm"
+                    : "text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
+                }`}
+                title={value.charAt(0).toUpperCase() + value.slice(1)}
+              >
+                {icon}
+              </button>
+            ))}
+          </div>
+        </div>
+
         {/* Privacy badge */}
         <button
           onClick={() => setActiveTab("settings")}
@@ -103,6 +138,8 @@ export default function MainWindow() {
         </button>
       </aside>
 
+      <Toaster />
+
       {/* Content Area */}
       <main className="flex-1 overflow-hidden flex flex-col relative bg-white dark:bg-[#1a1a1a]">
         <AnimatePresence mode="wait">
@@ -118,13 +155,7 @@ export default function MainWindow() {
             {activeTab === "templates" && <TemplateManager />}
             {activeTab === "settings" && <GeneralSettings />}
             {activeTab === "help" && <HelpGuide />}
-            {activeTab === "ai" && (
-              <EmptyState
-                tab={activeTab}
-                icon={<Sparkles size={48} />}
-                title="AI Reformat"
-              />
-            )}
+            {activeTab === "ai" && <AIReformat />}
           </motion.div>
         </AnimatePresence>
       </main>
@@ -171,34 +202,3 @@ function NavItem({
   );
 }
 
-function EmptyState({
-  icon,
-  title,
-  tab,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  tab: string;
-}) {
-  return (
-    <div className="flex-1 flex flex-col items-center justify-center text-center p-8">
-      <div className="w-20 h-20 bg-zinc-50 dark:bg-zinc-900 rounded-[22px] flex items-center justify-center text-blue-500 shadow-xl shadow-black/5 mb-6 border border-zinc-200 dark:border-zinc-800">
-        {icon}
-      </div>
-      <h2 className="text-xl font-bold tracking-tight font-display mb-1">
-        {title}
-      </h2>
-      <p className="text-zinc-400 dark:text-zinc-500 text-sm max-w-[240px] mx-auto leading-relaxed">
-        This module is currently being optimized for macOS performance.
-      </p>
-      <div className="mt-8 flex items-center gap-2 group cursor-default">
-        <span className="text-[10px] font-bold text-blue-500 uppercase tracking-widest">
-          Planned for
-        </span>
-        <span className="px-2 py-0.5 bg-blue-500/10 text-blue-500 rounded text-[9px] font-bold border border-blue-500/20">
-          PHASE {tab === "templates" ? "4" : tab === "ai" ? "5" : "7"}
-        </span>
-      </div>
-    </div>
-  );
-}

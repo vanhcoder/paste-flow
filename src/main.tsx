@@ -2,6 +2,9 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import "./styles/globals.css";
+import { initTheme } from "./lib/theme";
+
+initTheme();
 
 import MainWindow from "./windows/MainWindow";
 import QuickPaste from "./windows/QuickPaste";
@@ -11,7 +14,10 @@ async function init() {
   const label = getCurrentWindow().label;
 
   if (label === "quick-paste") {
-    ReactDOM.createRoot(document.getElementById("root")!).render(
+    const root = document.getElementById("root")!;
+    root.style.backgroundColor = "transparent";
+    document.body.style.backgroundColor = "transparent";
+    ReactDOM.createRoot(root).render(
       <React.StrictMode>
         <QuickPaste />
       </React.StrictMode>,

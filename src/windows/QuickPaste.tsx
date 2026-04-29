@@ -111,8 +111,8 @@ export default function QuickPaste() {
 
   const handlePaste = async () => {
     if (flow.step !== "preview") return;
-    await getCurrentWindow().hide();
     await api.pasteToActiveApp(flow.finalContent);
+    await getCurrentWindow().hide();
     await afterAction(flow.template, flow.values);
   };
 
@@ -121,8 +121,8 @@ export default function QuickPaste() {
     content: string,
     values: Record<string, string>,
   ) => {
-    await getCurrentWindow().hide();
     await api.pasteToActiveApp(content);
+    await getCurrentWindow().hide();
     await afterAction(tpl, values);
   };
 
@@ -150,15 +150,24 @@ export default function QuickPaste() {
 
       if (item.result_type === "history") {
         const content = await api.getClipContent(item.id);
-        await getCurrentWindow().hide();
+        // Paste first (Rust restores focus internally), then hide.
+        // Hiding before paste lets macOS briefly activate the main window.
         await api.pasteToActiveApp(content);
+        await getCurrentWindow().hide();
         reset();
       } else {
         const tpl = await api.getTemplate(item.id);
         if (tpl) await startTemplateFlow(tpl);
       }
-    } catch (err: any) {
-      alert("ERROR: " + err.message);
+    } catch (err: unknown) {
+      const msg =
+        typeof err === "string"
+          ? err
+          : err instanceof Error
+            ? err.message
+            : String(err);
+      // errors in quick-paste are shown inline — nothing to do here
+      console.error("QuickPaste error:", msg);
     }
   };
 
@@ -185,7 +194,10 @@ export default function QuickPaste() {
   };
 
   return (
-    <div className="h-screen w-screen bg-white/95 dark:bg-zinc-950/95 backdrop-blur-xl border border-zinc-200 dark:border-zinc-800 rounded-[12px] shadow-2xl flex flex-col overflow-hidden select-none relative">
+    <div
+      className="h-screen w-screen bg-white/96 dark:bg-zinc-900/96 backdrop-blur-2xl rounded-[14px] flex flex-col overflow-hidden select-none relative"
+      style={{ WebkitMaskImage: "-webkit-radial-gradient(white, black)" }}
+    >
       {/* Search Header */}
       <div className="flex items-center px-4 py-4 border-b border-zinc-100 dark:border-zinc-800 gap-3">
         <Search

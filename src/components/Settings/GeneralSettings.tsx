@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
-import { Monitor, Keyboard, Terminal, Sparkles, CheckCircle2, RotateCcw, ShieldCheck, HardDrive, Wifi, WifiOff, Lock, Database, Zap, ChevronDown, ChevronUp } from "lucide-react";
+import { Monitor, Keyboard, Terminal, Sparkles, CheckCircle2, RotateCcw, ShieldCheck, HardDrive, Wifi, WifiOff, Lock, Database, Zap, ChevronDown, ChevronUp, Eye, EyeOff, AlertCircle } from "lucide-react";
+import { toast } from "../../stores/toastStore";
 import { enable, disable, isEnabled } from "@tauri-apps/plugin-autostart";
 import { api } from "../../lib/tauri";
 
@@ -15,14 +16,36 @@ const HOTKEY_CONFIGS: HotkeyConfig[] = [
   { key: "hotkey_queue_next", label: "Queue Paste Next", description: "Paste next item from the queue." },
 ];
 
+const OPENAI_MODELS = [
+  { id: "gpt-4o-mini",  name: "GPT-4o mini  (fast · cheap)" },
+  { id: "gpt-4o",       name: "GPT-4o  (powerful)" },
+  { id: "gpt-4-turbo",  name: "GPT-4 Turbo" },
+];
+const ANTHROPIC_MODELS = [
+  { id: "claude-haiku-4-5-20251001", name: "Claude Haiku  (fast · cheap)" },
+  { id: "claude-sonnet-4-6",         name: "Claude Sonnet  (balanced)" },
+  { id: "claude-opus-4-7",           name: "Claude Opus  (most powerful)" },
+];
+
 const HOTKEY_DEFAULTS: Record<string, string> = {
   hotkey_quick_paste: "CmdOrCtrl+Shift+V",
   hotkey_queue_toggle: "CmdOrCtrl+Shift+Q",
   hotkey_queue_next: "CmdOrCtrl+Shift+N",
 };
 
+const isMac = navigator.platform.toUpperCase().startsWith("MAC");
+
 function formatShortcutDisplay(shortcut: string): string {
   if (!shortcut) return "Not set";
+  if (isMac) {
+    return shortcut
+      .replace(/CmdOrCtrl|CommandOrControl|Command/g, "⌘")
+      .replace(/Control|Ctrl/g, "⌃")
+      .replace(/Shift/g, "⇧")
+      .replace(/Alt|Option/g, "⌥")
+      .split("+")
+      .join("");
+  }
   return shortcut
     .replace("CmdOrCtrl", "Ctrl")
     .replace("CommandOrControl", "Ctrl")
@@ -89,7 +112,7 @@ function HotkeyRecorder({
         api
           .updateHotkey(settingKey, shortcut)
           .then(() => onUpdate(settingKey, shortcut))
-          .catch((err) => alert("Failed to update hotkey: " + err))
+          .catch((err) => toast.error("Failed to update hotkey: " + err))
           .finally(() => setSaving(false));
       }
     },
@@ -111,7 +134,7 @@ function HotkeyRecorder({
       await api.updateHotkey(settingKey, defaultVal);
       onUpdate(settingKey, defaultVal);
     } catch (err) {
-      alert("Failed to reset hotkey: " + err);
+      toast.error("Failed to reset hotkey: " + err);
     } finally {
       setSaving(false);
     }
@@ -162,12 +185,29 @@ export function GeneralSettings() {
   const [isLoading, setIsLoading] = useState(true);
   const [hotkeys, setHotkeys] = useState<Record<string, string>>({});
 
+  // AI settings
+  const [aiProvider, setAiProvider] = useState<"openai" | "anthropic">("openai");
+  const [aiModel, setAiModel]       = useState("gpt-4o-mini");
+  const [aiApiKey, setAiApiKey]     = useState("");
+  const [showKey, setShowKey]       = useState(false);
+  const [aiSaving, setAiSaving]     = useState(false);
+  const [aiSaved, setAiSaved]       = useState(false);
+
   useEffect(() => {
     async function loadSettings() {
       try {
-        const [enabled, hk] = await Promise.all([isEnabled(), api.getHotkeys()]);
+        const [enabled, hk, key, prov, mod] = await Promise.all([
+          isEnabled(),
+          api.getHotkeys(),
+          api.getSetting("ai_api_key"),
+          api.getSetting("ai_provider"),
+          api.getSetting("ai_model"),
+        ]);
         setAutostart(enabled);
         setHotkeys(hk);
+        if (key)  setAiApiKey(key);
+        if (prov) setAiProvider(prov as "openai" | "anthropic");
+        if (mod)  setAiModel(mod);
       } catch {
         // ignore load errors
       } finally {
@@ -184,13 +224,32 @@ export function GeneralSettings() {
       else await disable();
       setAutostart(newValue);
     } catch (e) {
-      alert("Failed to change autostart: " + e);
+      toast.error("Failed to change autostart: " + e);
     }
   };
 
   const handleHotkeyUpdate = (key: string, value: string) => {
     setHotkeys((prev) => ({ ...prev, [key]: value }));
   };
+
+  const handleSaveAI = async () => {
+    setAiSaving(true);
+    try {
+      await Promise.all([
+        api.setSetting("ai_api_key", aiApiKey.trim()),
+        api.setSetting("ai_provider", aiProvider),
+        api.setSetting("ai_model", aiModel),
+      ]);
+      setAiSaved(true);
+      setTimeout(() => setAiSaved(false), 2000);
+    } catch (e) {
+      toast.error("Failed to save AI settings: " + e);
+    } finally {
+      setAiSaving(false);
+    }
+  };
+
+  const aiModels = aiProvider === "anthropic" ? ANTHROPIC_MODELS : OPENAI_MODELS;
 
   return (
     <div className="flex-1 overflow-y-auto p-8 bg-white dark:bg-[#1a1a1a]">
@@ -251,24 +310,99 @@ export function GeneralSettings() {
           </p>
         </section>
 
-        {/* Section: AI Status */}
+        {/* Section: AI Integration */}
         <section className="space-y-4">
           <div className="flex items-center gap-2 mb-2 pb-2 border-b border-zinc-100 dark:border-zinc-800">
             <Sparkles size={16} className="text-zinc-400" />
             <h3 className="text-[11px] font-bold text-zinc-400 uppercase tracking-widest">AI Integration</h3>
           </div>
-          <div className="p-6 bg-gradient-to-br from-blue-600 to-indigo-700 rounded-[24px] text-white shadow-xl shadow-blue-500/20 relative overflow-hidden group">
-            <div className="relative z-10">
-              <div className="flex items-center gap-2 mb-4">
-                <div className="px-2 py-0.5 bg-white/20 rounded text-[9px] font-bold border border-white/20 uppercase">Next Major Update</div>
+
+          <div className="p-4 bg-zinc-50/50 dark:bg-zinc-800/30 rounded-2xl border border-zinc-200/50 dark:border-zinc-700/50 space-y-5">
+
+            {/* Provider toggle */}
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-bold">Provider</p>
+                <p className="text-xs text-zinc-500">OpenAI or Anthropic API.</p>
               </div>
-              <h4 className="text-lg font-bold mb-2">Generative Reformatting</h4>
-              <p className="text-xs text-blue-100 max-w-xs leading-relaxed mb-6">Connect your OpenAI or Anthropic keys to enable AI-powered text rewriting and multi-platform formatting.</p>
-              <button className="px-4 py-2 bg-white text-blue-600 rounded-xl text-xs font-bold shadow-lg shadow-black/10 flex items-center gap-2 opacity-50 cursor-not-allowed">
-                Set API Key <CheckCircle2 size={12} />
+              <div className="flex p-0.5 bg-zinc-100 dark:bg-zinc-800 rounded-xl border border-zinc-200 dark:border-zinc-700">
+                {(["openai", "anthropic"] as const).map(p => (
+                  <button
+                    key={p}
+                    onClick={() => {
+                      setAiProvider(p);
+                      setAiModel(p === "anthropic" ? ANTHROPIC_MODELS[0].id : OPENAI_MODELS[0].id);
+                    }}
+                    className={`px-3 py-1.5 rounded-lg text-[12px] font-bold transition-all ${
+                      aiProvider === p
+                        ? "bg-white dark:bg-zinc-700 text-zinc-900 dark:text-white shadow-sm"
+                        : "text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"
+                    }`}
+                  >
+                    {p === "openai" ? "OpenAI" : "Anthropic"}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* API Key */}
+            <div>
+              <label className="text-[11px] font-bold uppercase tracking-widest text-zinc-400 mb-1.5 block">
+                API Key
+              </label>
+              <div className="flex gap-2">
+                <input
+                  type={showKey ? "text" : "password"}
+                  value={aiApiKey}
+                  onChange={e => setAiApiKey(e.target.value)}
+                  placeholder={aiProvider === "openai" ? "sk-..." : "sk-ant-..."}
+                  className="flex-1 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl px-3 py-2 text-sm font-mono outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 dark:focus:border-blue-500 transition-all placeholder:text-zinc-300 dark:placeholder:text-zinc-600"
+                />
+                <button
+                  onClick={() => setShowKey(s => !s)}
+                  className="px-3 py-2 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors"
+                >
+                  {showKey ? <EyeOff size={14} /> : <Eye size={14} />}
+                </button>
+              </div>
+              {!aiApiKey.trim() && (
+                <p className="text-[11px] text-amber-500 flex items-center gap-1 mt-1.5">
+                  <AlertCircle size={11} /> Key is required to use AI Reformat
+                </p>
+              )}
+            </div>
+
+            {/* Model */}
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-bold">Model</p>
+                <p className="text-xs text-zinc-500">Affects speed and quality.</p>
+              </div>
+              <select
+                value={aiModel}
+                onChange={e => setAiModel(e.target.value)}
+                className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl px-3 py-2 text-[12px] font-semibold outline-none focus:ring-2 focus:ring-blue-500/20 text-zinc-700 dark:text-zinc-300 cursor-pointer"
+              >
+                {aiModels.map(m => (
+                  <option key={m.id} value={m.id}>{m.name}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Save */}
+            <div className="flex justify-end pt-1">
+              <button
+                onClick={handleSaveAI}
+                disabled={aiSaving}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-xl text-[13px] font-bold shadow-sm shadow-blue-500/20 transition-all active:scale-[0.98]"
+              >
+                {aiSaved
+                  ? <><CheckCircle2 size={14} /> Saved!</>
+                  : aiSaving
+                    ? "Saving..."
+                    : "Save AI Settings"}
               </button>
             </div>
-            <Sparkles size={120} className="absolute -right-4 -bottom-4 text-white/10 rotate-12 group-hover:scale-110 transition-transform duration-700" />
           </div>
         </section>
 

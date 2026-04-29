@@ -12,10 +12,14 @@ pub use search::*;
 pub use templates::*;
 
 use clipboard::watcher::ClipboardWatcher;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use tauri::Manager;
 use system::hotkey::HotkeyMap;
 use std::collections::HashMap;
+
+/// Stores the window that was focused immediately before the quick-paste popup
+/// opened. Used to restore focus + send Cmd/Ctrl+V to the right app.
+pub struct QuickPasteTarget(pub Arc<Mutex<platform::WindowHandle>>);
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -37,8 +41,17 @@ pub fn run() {
                         Some("quick_paste") => {
                             if let Some(win) = app_handle.get_webview_window("quick-paste") {
                                 let is_visible = win.is_visible().unwrap_or(false);
-                                if is_visible { let _ = win.hide(); }
-                                else { let _ = win.show(); let _ = win.set_focus(); }
+                                if is_visible {
+                                    let _ = win.hide();
+                                } else {
+                                    // Capture the focused app BEFORE our window steals focus.
+                                    let target = platform::get_active_window();
+                                    if let Some(state) = app_handle.try_state::<QuickPasteTarget>() {
+                                        *state.0.lock().unwrap() = target;
+                                    }
+                                    let _ = win.show();
+                                    let _ = win.set_focus();
+                                }
                             }
                         }
                         Some("queue_toggle") => {
@@ -69,6 +82,9 @@ pub fn run() {
             // ── HotkeyMap state (must be managed before registering) ──
             app.manage(HotkeyMap(Arc::new(std::sync::Mutex::new(HashMap::new()))));
 
+            // ── Quick-paste target window (captured before popup steals focus) ──
+            app.manage(QuickPasteTarget(Arc::new(Mutex::new(platform::NULL_WINDOW))));
+
             // ── Start Clipboard Watcher ──
             let watcher = ClipboardWatcher::new();
             let queue = Arc::new(clipboard::queue::PasteQueue::new());
@@ -94,9 +110,15 @@ pub fn run() {
                 });
             }
 
-            // ── Hide Quick Paste on Lost Focus ──
-            let handle_clone = app.handle().clone();
+            // ── Quick Paste: transparent bg + hide on focus-loss ──
             if let Some(win) = app.get_webview_window("quick-paste") {
+                #[cfg(any(target_os = "windows", target_os = "macos"))]
+                {
+                    use tauri::window::Color;
+                    let _ = win.set_background_color(Some(Color(0, 0, 0, 0)));
+                }
+
+                let handle_clone = app.handle().clone();
                 win.on_window_event(move |event| {
                     if let tauri::WindowEvent::Focused(false) = event {
                         if let Some(w) = handle_clone.get_webview_window("quick-paste") {
@@ -108,18 +130,12 @@ pub fn run() {
 
             // ── Queue Indicator: transparent bg + bottom-right position ──
             if let Some(queue_win) = app.get_webview_window("queue-indicator") {
-                // Windows: WebView2 needs an explicit RGBA(0,0,0,0) call to be
-                //          fully transparent. This is repeated in update_window_visibility
-                //          because WebView2 can reset it after hide/show cycles.
-                //
-                // TODO(macOS): No call needed here. Set `"transparent": true` in
-                //              tauri.conf.json for this window. For vibrancy (frosted
-                //              glass), add NSVisualEffectView via webview().with_webview().
-                //
-                // TODO(Linux): Set `"transparent": true` in tauri.conf.json.
-                //              Transparency requires a compositor (e.g. picom on X11).
-                //              On Wayland, the compositor handles it automatically.
-                #[cfg(target_os = "windows")]
+                // Both Windows (WebView2) and macOS (WKWebView) need an explicit
+                // RGBA(0,0,0,0) call — `transparent: true` in tauri.conf.json alone is
+                // not sufficient for the WebView renderer on either platform.
+                // This is also repeated in update_window_visibility because the renderer
+                // can reset it after hide/show cycles.
+                #[cfg(any(target_os = "windows", target_os = "macos"))]
                 {
                     use tauri::window::Color;
                     let _ = queue_win.set_background_color(Some(Color(0, 0, 0, 0)));
@@ -168,6 +184,12 @@ pub fn run() {
             system::settings::set_setting,
             system::hotkey::get_hotkeys,
             system::hotkey::update_hotkey,
+            ai::reformat::reformat_text,
+            ai::reformat::list_ai_skills,
+            ai::reformat::create_ai_skill,
+            ai::reformat::delete_ai_skill,
+            ai::reformat::get_reformat_history,
+            ai::reformat::generate_template,
         ])
         .run(tauri::generate_context!())
         .expect("error while running PasteFlow");
